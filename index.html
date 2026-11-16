@@ -1488,7 +1488,7 @@ const RESULTS = ['ענה – תרם', 'ענה – התחייב', 'ענה – ל�
 const later = (n, label) => ({label, fn: F => F.set('next_date', addDays(today(), n))});
 
 function donorForm(d, preset, onCreated) {
-  const isNew = !d, nextId = Math.max(0, ...S.donors.map(x => x.id)) + 1;
+  const isNew = !d, nextId = tempId();
   openForm({
     title: isNew ? 'תורם חדש' : 'עריכת תורם – ' + d.n, values: d ? {...d, tz: d.tz || donorTz(d)} : {id: nextId, ...(preset || {})},
     fields: [
@@ -1530,6 +1530,19 @@ async function linkSameName(did) {
   for (const r of revs) { const x = await api.insert('donations', [ndRow(r.payload, did)]); applyRowsQuiet('donations', x); applyRowsQuiet('nedarim_review', await api.update('nedarim_review', r.id, {status: 'done', resolution: 'added:' + did})); }
   if (cids.length || revs.length) await reload('commitments', 'donations', 'nedarim_review');
   return cids.length + revs.length;
+}
+// כרטיס שנפתח באתר מקבל מספר זמני (מ-900001) – כדי לא להתנגש בקודים שתוכנת הסליקה (אי פי טי) נותנת
+const TEMP_FROM = 900000;
+const tempId = () => Math.max(TEMP_FROM, ...S.donors.map(x => x.id).filter(x => x > TEMP_FROM)) + 1;
+const needsIptFn = () => { const sw = new Set(S.donations.filter(x => x.source === 'software' && x.donor_id).map(x => x.donor_id)), mx = Math.max(0, ...sw);
+  return d => !d.extra?.anon && !sw.has(d.id) && (d.id > TEMP_FROM || d.extra?.temp_id || d.id > mx); };
+async function renumDonor(oldId, nid) {
+  if (D.donors.has(nid)) throw new Error(`מספר ${nid} כבר קיים (${D.donors.get(nid).n})`);
+  const src = S.donors.find(x => x.id === oldId), copy = {};
+  for (const k of ['name', 'title', 'first_name', 'family', 'city', 'address', 'phone', 'phone2', 'email', 'father', 'father_in_law', 'country', 'notes', 'extra']) copy[k] = src[k] ?? null;
+  copy.extra = {...(copy.extra || {})}; delete copy.extra.temp_id;
+  applyRowsQuiet('donors', await api.insert('donors', [{id: nid, ...copy}]));
+  await mergePair(nid, oldId);
 }
 const AUTO_C = 'אוטומטי – לפי המגבית';
 function donationForm(x = {}) {
@@ -2381,11 +2394,7 @@ function renumDialog(d) {
     onSubmit: async v => {
       const nid = +v.nid; if (!nid || nid === d.id) throw new Error('צריך מספר אחר');
       if (D.donors.has(nid)) throw new Error(`מספר ${nid} כבר קיים (${D.donors.get(nid).n}). אם זה אותו אדם – "איחוד עם כרטיס אחר"`);
-      const src = S.donors.find(x => x.id === d.id), copy = {};
-      for (const k of ['name', 'title', 'first_name', 'family', 'city', 'address', 'phone', 'phone2', 'email', 'father', 'father_in_law', 'country', 'notes', 'extra']) copy[k] = src[k] ?? null;
-      copy.extra = copy.extra || {};
-      applyRowsQuiet('donors', await api.insert('donors', [{id: nid, ...copy}]));
-      try { await mergePair(nid, d.id); } catch (ex) { mergeErr(ex); return; }
+      try { await renumDonor(d.id, nid); } catch (ex) { mergeErr(ex); return; }
       await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review'); toast(`המספר הוחלף ל-${nid} ✓`); location.hash = 'donor/' + nid;
     }});
 }
@@ -2407,6 +2416,47 @@ async function mergePair(keep, drop) {
 }
 async function afterMerge(n) { await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review'); toast(`אוחדו ${n} כרטיסים ✓ – כל התרומות עברו לכרטיס שנשאר`); }
 const mergeErr = ex => toast(/merge_donors|does not exist|schema cache/i.test(ex.message) ? 'צריך להריץ קודם את עדכון 21 ב-Supabase' : 'שגיאה: ' + ex.message, true);
+/* ---- תורמים שנפתחו באתר ועוד אין להם קוד בתוכנת הסליקה (אי פי טי) ---- */
+const iptList = () => D.donorList.filter(needsIptFn());
+function iptSection() {
+  const L = iptList(); if (!L.length) return '';
+  return `<details class="fold"><summary>🔢 לפתוח בתוכנת הסליקה (קוד אי פי טי) <b>${nf0.format(L.length)}</b> <span class="muted" style="font-weight:400">נפתחו באתר ועוד אין להם מספר מהתוכנה</span></summary>
+    <div class="note" style="margin:10px 16px">1. <button class="btn sm primary" data-iptx>⬇ ייצוא לאקסל – להכנסה לתוכנה</button> &nbsp; 2. מכניסים לתוכנה (אפשר בייבוא מאקסל) &nbsp; 3. מייצאים מהתוכנה רשימת תורמים ← <label class="btn sm" style="cursor:pointer">⬆ ייבוא קודים מהתוכנה<input type="file" accept=".xlsx,.csv" data-ipti hidden></label> – והאתר מעדכן לכל אחד את המספר לבד (לפי ת"ז, טלפון או שם).</div><div id="tIpt"></div></details>`;
+}
+function bindIpt(v) {
+  const el = $('#tIpt'); if (!el) return;
+  const L = iptList();
+  DataTable(el, {id: 'ipt', rows: L, sort: 'n', dir: 1, exportName: 'לפתוח בתוכנה', onRow: r => location.hash = 'donor/' + r.id,
+    cols: [{k: 'id', label: 'מס׳ זמני', t: 'num', html: r => r.id}, {k: 'n', label: 'שם', html: r => donorLink(r.id, r.n)}, {k: 'tz', label: 'ת״ז'}, {k: 'phone', label: 'טלפון'}, {k: 'city', label: 'ישוב'}, {k: 'address', label: 'כתובת'}, {k: 'email', label: 'מייל'}, {k: 'total', label: 'תרם', t: 'money'}]});
+  $('[data-iptx]', v)?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation();
+    exportXlsx('לפתוח בתוכנת הסליקה', ['שם משפחה', 'שם פרטי', 'תז_בעל', 'כתובת', 'ישוב', 'טלפון', 'טלפון נייד', 'אימייל', 'שם אביו', 'מס באתר'],
+      L.map(d => [d.family || d.n, d.first_name || '', d.tz || '', d.address || '', d.city || '', d.phone2 || '', d.phone || '', d.email || '', d.father || '', d.id])); });
+  $('[data-ipti]', v)?.addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    let sheets; try { sheets = /\.csv$/i.test(f.name) ? [{rows: parseCsv(await f.text())}] : await readXlsx(f); } catch (ex) { return toast('לא הצלחתי לקרוא את הקובץ: ' + ex.message, true); }
+    const pairs = [];   // [מס תורם, ת"ז, טלפונים, שם]
+    for (const sh of sheets) {
+      const hi = sh.rows.findIndex(r => r.some(c => /מס[׳'_ ]*תורם|קוד/.test(String(c || ''))) && r.some(c => /שם/.test(String(c || ''))));
+      if (hi < 0) continue; const H = sh.rows[hi].map(c => String(c || '').trim());
+      const col = re => H.findIndex(h => re.test(h));
+      const cId = col(/מס[׳'_ ]*תורם|^קוד/), cTz = col(/ת.?ז|תז_בעל/), cF = col(/שם משפחה/), cP = col(/שם פרטי/), cN = col(/^שם( ומשפחה)?$/), cPh = H.map((h, i) => /טלפון|נייד/.test(h) ? i : -1).filter(i => i >= 0);
+      for (const r of sh.rows.slice(hi + 1)) { const id = +String(r[cId] ?? '').replace(/\D/g, ''); if (!id) continue;
+        pairs.push({id, tz: String(r[cTz] ?? '').replace(/\D/g, '').replace(/^0+/, ''), ph: cPh.map(i => phone9(r[i])).filter(x => x.length >= 9), name: cF >= 0 ? [r[cF], r[cP]].filter(Boolean).join(' ') : String(r[cN] ?? '')}); }
+    }
+    if (!pairs.length) return toast('לא מצאתי בקובץ עמודת "מס תורם" עם שמות', true);
+    let n = 0, skip = 0;
+    for (const d of iptList()) {
+      const tz = String(d.tz || '').replace(/^0+/, ''), dp = [d.phone, d.phone2].map(phone9).filter(x => x.length >= 9);
+      const m = (tz && pairs.filter(p => p.tz === tz)) || [];
+      const hit = m.length === 1 ? m[0] : (() => { const byPh = pairs.filter(p => p.ph.some(x => dp.includes(x)) && sameName2(p.name, d.name)); if (byPh.length === 1) return byPh[0];
+        const byN = pairs.filter(p => sameName2(p.name, d.name)); return byN.length === 1 && !D.donors.has(byN[0].id) ? byN[0] : null; })();
+      if (!hit || D.donors.has(hit.id)) { skip++; continue; }
+      try { await renumDonor(d.id, hit.id); n++; } catch (ex) { console.warn(ex); skip++; }
+    }
+    await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review');
+    toast(`עודכנו ${n} מספרי תורם מהתוכנה ✓${skip ? ` · ${skip} לא נמצאו בקובץ (נשארים ברשימה)` : ''}`);
+  });
+}
 function similarSection() {
   const pairs = similarDonors(); if (!pairs.length) return '';
   const sure = pairs.filter(p => p.sure).length;
@@ -2450,7 +2500,7 @@ routes.donors = v => {
   const y0 = D.years[0], y1 = y0 - 1;
   const miss = missingDonors();
   v.innerHTML = head('תורמים', `${nf0.format(D.donorList.length)} תורמים · לחיצה על שורה פותחת כרטיס תורם`, addBtn('donor', '👤 תורם חדש')) +
-    similarSection() + (miss.length ? `<details class="fold"><summary>⚠ צריך לפתוח כרטיס תורם – התרומות שלהם כבר בתרומות, רק בלי כרטיס <b>${nf0.format(miss.length)}</b> <span class="muted" style="font-weight:400">${money(sum(miss, m => m.paid))}</span></summary><div class="note" id="missNote" style="margin:10px 16px"></div><div id="tMiss"></div></details>` : '') + '<div id="t"></div>';
+    iptSection() + similarSection() + (miss.length ? `<details class="fold"><summary>⚠ צריך לפתוח כרטיס תורם – התרומות שלהם כבר בתרומות, רק בלי כרטיס <b>${nf0.format(miss.length)}</b> <span class="muted" style="font-weight:400">${money(sum(miss, m => m.paid))}</span></summary><div class="note" id="missNote" style="margin:10px 16px"></div><div id="tMiss"></div></details>` : '') + '<div id="t"></div>';
   if (miss.length) {
     for (const m of miss) m.sug = suggestDonor(m.name, {phone: m.phone, city: m.city});
     const withSug = miss.filter(m => m.sug);
@@ -2497,7 +2547,7 @@ routes.donors = v => {
         async () => { await reload('commitments', 'donations'); toast(`נפתח כרטיס ל${m.name} – ההתחייבויות שלו נכנסו לתרומות ✓`); routes.donors(v); });
     }, true);
   }
-  bindSimilar(v);
+  bindSimilar(v); bindIpt(v);
   const rows = D.donorList.map(d => Object.assign(d, {status: donorStatus(d)[0], cy: d.byYear[y0] || 0, py: d.byYear[y1] || 0}));
   DataTable($('#t'), {
     id: 'donors', rows, sort: 'total', exportName: 'תורמים', onRow: r => location.hash = 'donor/' + r.id,
@@ -3484,7 +3534,7 @@ routes.nedarim = async v => {
       if ('revnewall' in ds) {
         e.target.disabled = true; e.target.textContent = 'פותח כרטיסים…';
         const groups = new Map(); for (const r of rev.filter(r => !SUG.has(r.id) && !r.donor_id && r.reason !== 'incomplete' && (r.payload.name || '').trim())) { const k = gk(r.payload) || 'n:' + campKey(r.payload.name); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
-        let next = Math.max(0, ...S.donors.map(x => x.id)) + 1, n = 0;
+        let next = tempId(), n = 0;
         for (const rs of groups.values()) {
           const p = rs[0].payload, parts = (p.name || '').trim().split(/\s+/), tz = String(p.id_number || '').replace(/\D/g, '').replace(/^0+/, '');
           const row = {id: next++, family: parts[0] || '', first_name: parts.slice(1).join(' '), name: p.name.trim(), phone: p.phone || null, email: p.email || null, address: p.address || null, city: p.city || null,
