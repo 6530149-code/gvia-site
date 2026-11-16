@@ -3391,16 +3391,26 @@ routes.nedarim = async v => {
   const grpOf = r => { const k = gk(r.payload); return k ? rev.filter(x => gk(x.payload) === k) : [r]; };
   // הצעת תורם: לפי טלפון שכבר קיים בכרטיס, ואם לא – לפי שם דומה
   const phIdx = new Map(); for (const d of D.donorList) for (const ph of [d.phone, d.phone2, ...(d.extra?.nd_phones || [])]) { const k = phone9(ph); if (k.length >= 9) { if (!phIdx.has(k)) phIdx.set(k, new Set()); phIdx.get(k).add(d.id); } }
-  const sugFor = r => { if (r.donor_id) return null; const p = r.payload; const byPh = phIdx.get(phone9(p.phone)); if (byPh && byPh.size === 1) return {d: D.donors.get([...byPh][0]), why: 'אותו טלפון'};
-    const d = p.name ? suggestDonor(p.name, {phone: p.phone, city: p.city || p.address}) : null; return d ? {d, why: 'שם דומה'} : null; };
+  // הצעה רק כשהכל מתאים: שם דומה + אותו ישוב + (אותו טלפון או אותה ת"ז)
+  const tzIdx = new Map(); for (const d of D.donorList) for (const z of [donorTz(d), ...(d.extra?.nd_ids || [])]) { const k = String(z || '').replace(/\D/g, '').replace(/^0+/, ''); if (k.length >= 5) { if (!tzIdx.has(k)) tzIdx.set(k, new Set()); tzIdx.get(k).add(d.id); } }
+  const sugFor = r => {
+    if (r.donor_id) return null; const p = r.payload;
+    const tz = String(p.id_number || '').replace(/\D/g, '').replace(/^0+/, ''), ids = new Set([...(tzIdx.get(tz) || []), ...(phIdx.get(phone9(p.phone)) || [])]);
+    const nt = donorSkel(p.name || ''), pc = campKey(p.city || p.address || '');
+    const ok = [...ids].map(id => D.donors.get(id)).filter(d => { if (!d || !pc || !d.city) return false; const dc = campKey(d.city);
+      return (pc.includes(dc) || dc.includes(pc)) && donorSkel(d.name).some(w => nt.includes(w)); });
+    return ok.length === 1 ? {d: ok[0], why: [tzIdx.get(tz)?.has(ok[0].id) ? 'אותה ת"ז' : 'אותו טלפון', 'אותו ישוב', 'שם דומה'].join(' · ')} : null;
+  };
   const SUG = new Map(rev.map(r => [r.id, sugFor(r)]).filter(([, v]) => v && v.d));
   if (rev.length) {
     $('#ndRev').innerHTML = `<div class="card"><div class="hd"><h3>תרומות לשיוך</h3><span class="hint">${nf0.format(rev.length)} ממתינות</span></div>
+      ${(() => { const n = new Set(rev.filter(r => !SUG.has(r.id) && !r.donor_id && r.reason !== 'incomplete' && (r.payload.name || '').trim()).map(r => gk(r.payload) || 'n:' + campKey(r.payload.name))).size;
+        return n ? `<div class="note" style="margin:10px 16px">${nf0.format(n)} תורמים שאין להם כרטיס. <button class="btn sm primary" data-revnewall>לפתוח כרטיס חדש לכולם (${nf0.format(n)})</button> <small class="muted">כל אדם – כרטיס אחד, עם השם, הטלפון, המייל והת"ז מנדרים פלוס, וכל התרומות שלו נכנסות אליו</small></div>` : ''; })()}
       ${SUG.size ? `<div class="note" style="margin:10px 16px">ל-${nf0.format(SUG.size)} תרומות מצאתי כרטיס קיים (אותו טלפון או שם דומה) – "אולי זה" ליד כל אחת. <button class="btn sm primary" data-revsugall>לשייך את כל ${nf0.format(SUG.size)} ההצעות</button></div>` : ''}<ul class="todo-list">${rev.slice(0, 60).map(r => {
       const p = r.payload, c = candFor(r), g = grpN(r);
       return `<li style="align-items:flex-start;flex-wrap:wrap"><div class="main" style="min-width:240px">${r.reason === 'incomplete' ? pill('חסר סכום/תאריך – לבדוק במייל', 'warn') + ' ' : ''}<b>${esc(p.name || 'ללא שם')}</b>${g > 1 ? ' ' + pill(`${g} תרומות של אותו אדם – שיוך אחד משייך את כולן`, 'info') + `<details class="ndgrp"><summary>להציג את ${g} התרומות</summary><ul>${grpOf(r).map(x => `<li>${fdate(x.payload.date)} · ${money(x.payload.amount)}${x.payload.category ? ' · ' + esc(x.payload.category) : ''}${x.payload.installments ? ' · ' + esc(x.payload.installments) : ''}</li>`).join('')}</ul></details>` : ''}${SUG.get(r.id) ? `<div class="ndsug">אולי זה: ${donorLink(SUG.get(r.id).d.id, SUG.get(r.id).d.n)} <small class="muted">(${SUG.get(r.id).why}${SUG.get(r.id).d.city ? ' · ' + esc(SUG.get(r.id).d.city) : ''})</small> <button class="btn sm" data-revsug="${r.id}:${SUG.get(r.id).d.id}">✓ לשייך אליו</button></div>` : ''} · ${money(p.amount)} · ${fdate(p.date)}${r.donor_id ? ` · זוהה כ-${donorLink(r.donor_id)}, יש כמה תרומות מתאימות – בחרו:` : ''}
         <small>${[p.phone, p.email, p.id_number ? 'ת״ז ' + p.id_number : '', p.category, p.last4 ? '•••• ' + p.last4 : '', p.installments === 'הו"ק' ? 'הו״ק' : ''].filter(Boolean).map(esc).join(' · ')}</small>
-        ${c.length ? `<div class="quick" style="margin-top:6px">${c.map(x => `<button data-revmerge="${r.id}:${x.id}" title="מיזוג לתרומה קיימת">↔ ${esc(dname(x.donor_id) || x.donor_name || '')} ${fdate(x.d)} ${money(x.amount)}</button>`).join('')}</div>` : ''}</div>
+</div>
         <div class="acts" style="flex-wrap:wrap"><button class="btn sm primary" data-revassign="${r.id}">שיוך לתורם</button><button class="btn sm" data-revnew="${r.id}">תורם חדש</button><button class="btn sm" data-revanon="${r.id}">לתורם ללא שם</button><button class="btn sm" data-revskip="${r.id}" title="לא להכניס">✕</button></div></li>`; }).join('')}</ul>
       ${rev.length > 60 ? `<div class="more">מוצגות 60 הראשונות – אחרי הטיפול יופיעו הבאות</div>` : ''}</div>`;
   }
@@ -3442,6 +3452,19 @@ routes.nedarim = async v => {
         applyRows('donations', r1); await done(r, 'merged:' + did); toast('מוזג לתרומה הקיימת ✓'); await learn(o.donor_id, r.payload);
       }
       if (ds.revsug) { const [rid, did] = ds.revsug.split(':').map(Number); const r = findR(rid); if (r) { e.target.disabled = true; await addDon(r, did); } return; }
+      if ('revnewall' in ds) {
+        e.target.disabled = true; e.target.textContent = 'פותח כרטיסים…';
+        const groups = new Map(); for (const r of rev.filter(r => !SUG.has(r.id) && !r.donor_id && r.reason !== 'incomplete' && (r.payload.name || '').trim())) { const k = gk(r.payload) || 'n:' + campKey(r.payload.name); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
+        let next = Math.max(0, ...S.donors.map(x => x.id)) + 1, n = 0;
+        for (const rs of groups.values()) {
+          const p = rs[0].payload, parts = (p.name || '').trim().split(/\s+/), tz = String(p.id_number || '').replace(/\D/g, '').replace(/^0+/, '');
+          const row = {id: next++, family: parts[0] || '', first_name: parts.slice(1).join(' '), name: p.name.trim(), phone: p.phone || null, email: p.email || null, address: p.address || null, city: p.city || null,
+            extra: tz.length >= 5 ? {id_number: tz, nd_ids: [tz]} : {}};
+          try { const x = await api.insert('donors', [row]); applyRowsQuiet('donors', x); for (const r of rs) await addDon(r, row.id, true); n++; } catch (ex) { console.warn(ex); }
+        }
+        try { await q(sb.rpc('nedarim_reassign')); } catch {}
+        await reload('donations', 'nedarim_review', 'donors'); toast(`נפתחו ${n} כרטיסים חדשים ✓`); return;
+      }
       if ('revsugall' in ds) {
         
         e.target.disabled = true; e.target.textContent = 'משייך…'; let n = 0;
