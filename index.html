@@ -2325,8 +2325,8 @@ function similarDonors() {
       if (a.father && b.father && donorSkel(a.father).join() !== donorSkel(b.father).join()) continue;   // שם האב שונה
       const pa = [a.phone, a.phone2].map(phone9).filter(x => x.length >= 9), pb = [b.phone, b.phone2].map(phone9).filter(x => x.length >= 9);
       const samePhone = pa.some(x => pb.includes(x)), diffPhone = pa.length && pb.length && !samePhone;
-      const ca = campKey(a.city), cb = campKey(b.city), diffCity = ca && cb && ca !== cb;
-      if (diffPhone && diffCity) continue;
+      const ca = campKey(a.city), cb = campKey(b.city), diffCity = ca && cb && !ca.includes(cb) && !cb.includes(ca);
+      if (diffCity && !samePhone && !(a.tz && a.tz === b.tz)) continue;   // ישוב שונה – רק עם אותו טלפון / אותה ת"ז
       if (!rare && !samePhone && !(a.tz && a.tz === b.tz) && campKey(a.name) !== campKey(b.name)) continue;   // שם נפוץ – רק עם סימן נוסף
       const exact = A.t.length === B.t.length;
       const sure = (exact && !diffPhone && !diffCity) || samePhone || (a.tz && a.tz === b.tz);
@@ -2354,7 +2354,8 @@ function suggestDonor(name, ctx) {
   // טלפון שונה וגם ישוב שונה – רק השם דומה, לא מציעים
   const cph = phone9(ctx?.phone), cc = campKey(ctx?.city || '');
   const conflict = d => { const dp = [d.phone, d.phone2].map(phone9).filter(x => x.length >= 9); const dc = campKey(d.city || '');
-    return cph.length >= 9 && dp.length && !dp.includes(cph) && cc && dc && !(cc.includes(dc) || dc.includes(cc)); };
+    const cityDiff = cc && dc && !(cc.includes(dc) || dc.includes(cc));
+    return cityDiff && !(cph.length >= 9 && dp.includes(cph)); };   // ישוב שונה – רק אם אותו טלפון
   for (const [id, h] of hits) if (conflict(h.d)) hits.delete(id);
   const all = [...hits.values()], ex = all.filter(h => h.exact);
   return ex.length === 1 ? ex[0].d : all.length === 1 ? all[0].d : null;
