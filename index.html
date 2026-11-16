@@ -550,6 +550,9 @@ table.dt tr.crow.done td { background: color-mix(in srgb, #18a074 10%, var(--sur
 .cprog { display: grid; gap: 3px; min-width: 150px; font-size: 12px; color: var(--ink-2); }
 .cprog i { display: block; height: 6px; border-radius: 6px; background: var(--surface-2); overflow: hidden; border: 1px solid var(--border); }
 .cprog b { display: block; height: 100%; background: var(--grad-gold, var(--accent)); }
+/* נדרים פלוס: רשימת התרומות של אותו אדם + הצעת תורם */
+.ndgrp{margin-top:4px;font-size:12.5px}.ndgrp summary{cursor:pointer;color:var(--accent)}.ndgrp ul{margin:4px 0 0;padding-inline-start:18px;color:var(--ink-2)}
+.ndsug{margin-top:6px;padding:6px 10px;border-radius:10px;background:color-mix(in srgb,#18a074 9%,var(--surface));font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -2099,6 +2102,10 @@ const markPaid = async i => { const r = await api.update('invoices', i.id, {stat
    ניתוב
    ========================================================= */
 const routes = {};
+// מה שפתוח (קטעים מתקפלים) נשאר פתוח אחרי שמירה / שיוך
+const FOLDS = {};
+document.addEventListener('toggle', e => { if (e.target.matches?.('#view details')) FOLDS[location.hash] = [...document.querySelectorAll('#view details')].map(d => d.open); }, true);
+function restoreFolds() { const st = FOLDS[location.hash]; if (!st) return; document.querySelectorAll('#view details').forEach((d, i) => { if (st[i] != null && d.open !== st[i]) d.open = st[i]; }); }
 let resizeFn = null;
 function route(keep) {
   if (!D) return;
@@ -2111,7 +2118,9 @@ function route(keep) {
   document.querySelectorAll('#nav a').forEach(a => a.classList.toggle('on', a.dataset.r === r || (r === 'donor' && a.dataset.r === 'donors')));
   { const c = $('#crumb'); if (c && !c.textContent) try { const d = new Date(); c.textContent = d.toLocaleDateString('he-IL-u-ca-hebrew', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'}); $('#crumbDate').textContent = d.toLocaleDateString('he-IL', {day: 'numeric', month: 'long', year: 'numeric'}); } catch {} }
   resizeFn = null;
+  if (!keep) delete FOLDS[location.hash];
   (routes[r] || routes.today)($('#view'), decodeURIComponent(arg || ''));
+  restoreFolds();
   window.scrollTo(0, y);
 }
 window.addEventListener('hashchange', () => route(false));
@@ -2329,7 +2338,7 @@ function similarDonors() {
   return out.sort((x, y) => y.score - x.score || (y.keep.total + y.drop.total) - (x.keep.total + x.drop.total));
 }
 let SKEL_IDX = null;
-function suggestDonor(name) {
+function suggestDonor(name, ctx) {
   if (!SKEL_IDX || SKEL_IDX.D !== D) {
     const idx = new Map();
     for (const d of D.donorList) { if (d.extra?.anon) continue; const t = donorSkel(d.name); if (t.length < 2) continue; for (const w of t) { if (!idx.has(w)) idx.set(w, []); idx.get(w).push({d, t}); } }
@@ -2342,8 +2351,25 @@ function suggestDonor(name) {
     const sh = e.t.filter(x => T.includes(x)).length;
     if (sh >= 2 && (e.t.every(x => T.includes(x)) || T.every(x => e.t.includes(x))) && e.t.some(x => T.includes(x) && SKEL_IDX.idx.get(x).length <= RARE)) hits.set(e.d.id, {d: e.d, exact: e.t.length === T.length});
   }
+  // טלפון שונה וגם ישוב שונה – רק השם דומה, לא מציעים
+  const cph = phone9(ctx?.phone), cc = campKey(ctx?.city || '');
+  const conflict = d => { const dp = [d.phone, d.phone2].map(phone9).filter(x => x.length >= 9); const dc = campKey(d.city || '');
+    return cph.length >= 9 && dp.length && !dp.includes(cph) && cc && dc && !(cc.includes(dc) || dc.includes(cc)); };
+  for (const [id, h] of hits) if (conflict(h.d)) hits.delete(id);
   const all = [...hits.values()], ex = all.filter(h => h.exact);
   return ex.length === 1 ? ex[0].d : all.length === 1 ? all[0].d : null;
+}
+function mergeDialog(d) {
+  openForm({title: 'איחוד עם כרטיס אחר', sub: `"${esc(d.n)}" (מס׳ ${d.id}) פתוח פעמיים? בוחרים את הכרטיס השני – וכל התרומות, ההתחייבויות, השיחות ונדרים פלוס עוברים לכרטיס אחד.`,
+    fields: [{k: 'other', label: 'הכרטיס השני', t: 'donor', req: true}, {k: 'keep_this', label: 'איזה כרטיס יישאר', t: 'check', text: `להשאיר את הכרטיס הזה (${d.id}) ולמחוק את השני`}],
+    submitLabel: 'איחוד',
+    onSubmit: async v => {
+      if (+v.other === d.id) throw new Error('זה אותו כרטיס');
+      const o = D.donors.get(+v.other), [keep, drop] = v.keep_this ? [d, o] : [o, d];
+      
+      try { await mergePair(keep.id, drop.id); } catch (ex) { mergeErr(ex); return; }
+      await afterMerge(1); location.hash = 'donor/' + keep.id;
+    }});
 }
 async function mergePair(keep, drop) {
   const r = await rpc('merge_donors', {p_keep: keep, p_drop: drop});
@@ -2375,14 +2401,13 @@ function bindSimilar(v) {
       return;
     }
     const [keep, drop] = b.dataset.swap ? [p.drop, p.keep] : [p.keep, p.drop];
-    if (!confirm(`לאחד את "${drop.n}" לתוך "${keep.n}"?\nכל התרומות וההתחייבויות של "${drop.n}" יעברו ל"${keep.n}", והכרטיס הכפול יימחק.`)) return;
     b.disabled = true;
     try { await mergePair(keep.id, drop.id); await afterMerge(1); } catch (ex) { mergeErr(ex); b.disabled = false; }
   }, true);
   $('[data-mergesure]', v)?.addEventListener('click', async e => {
     e.preventDefault(); e.stopPropagation();
     const list = pairs.filter(p => p.sure), done = new Set(); let n = 0;
-    if (!confirm(`לאחד עכשיו ${list.length} זוגות כמעט בטוחים?\n(אותו שם בכתיב אחר / אותו טלפון / אותה ת"ז)`)) return;
+    
     e.target.disabled = true; e.target.textContent = 'מאחד…';
     try {
       for (const p of list) { if (done.has(p.keep.id) || done.has(p.drop.id)) continue; await mergePair(p.keep.id, p.drop.id); done.add(p.drop.id); n++; }
@@ -2397,12 +2422,12 @@ routes.donors = v => {
   v.innerHTML = head('תורמים', `${nf0.format(D.donorList.length)} תורמים · לחיצה על שורה פותחת כרטיס תורם`, addBtn('donor', '👤 תורם חדש')) +
     similarSection() + (miss.length ? `<details class="fold"><summary>⚠ צריך לפתוח כרטיס תורם – התרומות שלהם כבר בתרומות, רק בלי כרטיס <b>${nf0.format(miss.length)}</b> <span class="muted" style="font-weight:400">${money(sum(miss, m => m.paid))}</span></summary><div class="note" id="missNote" style="margin:10px 16px"></div><div id="tMiss"></div></details>` : '') + '<div id="t"></div>';
   if (miss.length) {
-    for (const m of miss) m.sug = suggestDonor(m.name);
+    for (const m of miss) m.sug = suggestDonor(m.name, {phone: m.phone, city: m.city});
     const withSug = miss.filter(m => m.sug);
     $('#missNote').innerHTML = withSug.length ? `ל-${nf0.format(withSug.length)} שמות מצאתי כרטיס קיים בשם דומה (עמודה "אולי זה התורם"). אפשר לשייך אחד-אחד, או <button class="btn sm primary" data-sugall>לשייך את כל ${nf0.format(withSug.length)} ההצעות</button> – כדאי לעבור על הרשימה לפני כן.` : 'פותחים כרטיס – וכל ההתחייבויות של השם נכנסות לבד לתרומות שלו.';
     $('[data-sugall]', v)?.addEventListener('click', async e => {
       e.preventDefault(); e.stopPropagation();
-      if (!confirm(`לשייך ${withSug.length} שמות לכרטיסים הקיימים שהוצעו?`)) return;
+      
       e.target.disabled = true; e.target.textContent = 'משייך…'; let n = 0;
       try {
         for (const m of withSug) {
@@ -2421,11 +2446,11 @@ routes.donors = v => {
     const linkTo = async (m, did) => {
       const ids = S.commitments.filter(c => !c.donor_id && campKey(c.donor_name) === campKey(m.name)).map(c => c.id);
       for (let i = 0; i < ids.length; i += 100) await q(sb.from('commitments').update({donor_id: did}).in('id', ids.slice(i, i + 100)));
-      await reload('commitments', 'donations'); toast(`שויכו ${ids.length} התחייבויות ל${D.donors.get(did)?.n || ''} ✓`); routes.donors($('#view'));
+      await reload('commitments', 'donations'); toast(`שויכו ${ids.length} התחייבויות ל${D.donors.get(did)?.n || ''} ✓`);
     };
     $('#tMiss').addEventListener('click', e => {
       const sg = e.target.closest('[data-sugdonor]');
-      if (sg) { e.stopPropagation(); const m = miss.find(x => x.name === sg.dataset.sugdonor); if (m?.sug && confirm(`לשייך את "${m.name}" (${m.n} התחייבויות, ${money(m.paid)}) לכרטיס של "${m.sug.n}"?`)) linkTo(m, m.sug.id).catch(ex => toast(ex.message, true)); return; }
+      if (sg) { e.stopPropagation(); const m = miss.find(x => x.name === sg.dataset.sugdonor); if (m?.sug) { sg.disabled = true; linkTo(m, m.sug.id).catch(ex => toast(ex.message, true)); } return; }
       const lk = e.target.closest('[data-linkdonor]');
       if (lk) {
         e.stopPropagation(); const m = miss.find(x => x.name === lk.dataset.linkdonor);
@@ -2473,7 +2498,7 @@ routes.donor = (v, id) => {
   const f = (l, val) => val ? `<div><small>${esc(l)}</small>${val}</div>` : '';
   const ex = d.extra || {};
   v.innerHTML = `<div class="page-head"><div><a href="#donors">→ חזרה לתורמים</a></div><div class="page-actions">
-      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button></div></div>
+      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button><button class="btn" data-act="merge" title="אותו אדם פתוח בשני כרטיסים">🔗 איחוד עם כרטיס אחר</button></div></div>
   <div class="card"><div class="profile">
     <div class="avatar">${esc(((d.family || d.n || '').match(/[א-תA-Za-z]/) || ['?'])[0])}</div>
     <div style="flex:1;min-width:200px"><h2>${esc([d.title, d.n].filter(Boolean).join(' '))}</h2>
@@ -2499,7 +2524,7 @@ routes.donor = (v, id) => {
     <button data-t="call">שיחות<span class="c"> ${calls.length}</span></button>
     <button data-t="fail">עסקאות שנכשלו<span class="c"> ${fails.length}</span></button>
   </div><div id="dT"></div>`;
-  v.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d)})[b.dataset.act](); };
+  v.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d), merge: () => mergeDialog(d)})[b.dataset.act](); };
   const draw = () => {
     if (!dons.length) { $('#dChart').innerHTML = '<div class="empty">אין תרומות רשומות</div>'; return; }
     const first = dons[dons.length - 1].d, [fy, fm] = [+first.slice(0, 4), +first.slice(5, 7)], [ly, lm] = [+D.lastDate.slice(0, 4), +D.lastDate.slice(5, 7)];
@@ -3362,10 +3387,17 @@ routes.nedarim = async v => {
   const gk = p => { const tz = String(p.id_number || '').replace(/\D/g, '').replace(/^0+/, ''); if (tz.length >= 5) return 'z' + tz; const ph = String(p.phone || '').replace(/\D/g, '').replace(/^972/, '0'); if (ph.length >= 9 && !/^0+$/.test(ph)) return 'p' + ph.slice(-9); return p.email ? 'e' + String(p.email).toLowerCase() : null; };
   const gCount = new Map(); rev.forEach(r => { const k = gk(r.payload); if (k) gCount.set(k, (gCount.get(k) || 0) + 1); });
   const grpN = r => gCount.get(gk(r.payload)) || 1;
+  const grpOf = r => { const k = gk(r.payload); return k ? rev.filter(x => gk(x.payload) === k) : [r]; };
+  // הצעת תורם: לפי טלפון שכבר קיים בכרטיס, ואם לא – לפי שם דומה
+  const phIdx = new Map(); for (const d of D.donorList) for (const ph of [d.phone, d.phone2, ...(d.extra?.nd_phones || [])]) { const k = phone9(ph); if (k.length >= 9) { if (!phIdx.has(k)) phIdx.set(k, new Set()); phIdx.get(k).add(d.id); } }
+  const sugFor = r => { if (r.donor_id) return null; const p = r.payload; const byPh = phIdx.get(phone9(p.phone)); if (byPh && byPh.size === 1) return {d: D.donors.get([...byPh][0]), why: 'אותו טלפון'};
+    const d = p.name ? suggestDonor(p.name, {phone: p.phone, city: p.city || p.address}) : null; return d ? {d, why: 'שם דומה'} : null; };
+  const SUG = new Map(rev.map(r => [r.id, sugFor(r)]).filter(([, v]) => v && v.d));
   if (rev.length) {
-    $('#ndRev').innerHTML = `<div class="card"><div class="hd"><h3>תרומות לשיוך</h3><span class="hint">${nf0.format(rev.length)} ממתינות</span></div><ul class="todo-list">${rev.slice(0, 60).map(r => {
+    $('#ndRev').innerHTML = `<div class="card"><div class="hd"><h3>תרומות לשיוך</h3><span class="hint">${nf0.format(rev.length)} ממתינות</span></div>
+      ${SUG.size ? `<div class="note" style="margin:10px 16px">ל-${nf0.format(SUG.size)} תרומות מצאתי כרטיס קיים (אותו טלפון או שם דומה) – "אולי זה" ליד כל אחת. <button class="btn sm primary" data-revsugall>לשייך את כל ${nf0.format(SUG.size)} ההצעות</button></div>` : ''}<ul class="todo-list">${rev.slice(0, 60).map(r => {
       const p = r.payload, c = candFor(r), g = grpN(r);
-      return `<li style="align-items:flex-start;flex-wrap:wrap"><div class="main" style="min-width:240px">${r.reason === 'incomplete' ? pill('חסר סכום/תאריך – לבדוק במייל', 'warn') + ' ' : ''}<b>${esc(p.name || 'ללא שם')}</b>${g > 1 ? ' ' + pill(`${g} תרומות של אותו אדם – שיוך אחד משייך את כולן`, 'info') : ''} · ${money(p.amount)} · ${fdate(p.date)}${r.donor_id ? ` · זוהה כ-${donorLink(r.donor_id)}, יש כמה תרומות מתאימות – בחרו:` : ''}
+      return `<li style="align-items:flex-start;flex-wrap:wrap"><div class="main" style="min-width:240px">${r.reason === 'incomplete' ? pill('חסר סכום/תאריך – לבדוק במייל', 'warn') + ' ' : ''}<b>${esc(p.name || 'ללא שם')}</b>${g > 1 ? ' ' + pill(`${g} תרומות של אותו אדם – שיוך אחד משייך את כולן`, 'info') + `<details class="ndgrp"><summary>להציג את ${g} התרומות</summary><ul>${grpOf(r).map(x => `<li>${fdate(x.payload.date)} · ${money(x.payload.amount)}${x.payload.category ? ' · ' + esc(x.payload.category) : ''}${x.payload.installments ? ' · ' + esc(x.payload.installments) : ''}</li>`).join('')}</ul></details>` : ''}${SUG.get(r.id) ? `<div class="ndsug">אולי זה: ${donorLink(SUG.get(r.id).d.id, SUG.get(r.id).d.n)} <small class="muted">(${SUG.get(r.id).why}${SUG.get(r.id).d.city ? ' · ' + esc(SUG.get(r.id).d.city) : ''})</small> <button class="btn sm" data-revsug="${r.id}:${SUG.get(r.id).d.id}">✓ לשייך אליו</button></div>` : ''} · ${money(p.amount)} · ${fdate(p.date)}${r.donor_id ? ` · זוהה כ-${donorLink(r.donor_id)}, יש כמה תרומות מתאימות – בחרו:` : ''}
         <small>${[p.phone, p.email, p.id_number ? 'ת״ז ' + p.id_number : '', p.category, p.last4 ? '•••• ' + p.last4 : '', p.installments === 'הו"ק' ? 'הו״ק' : ''].filter(Boolean).map(esc).join(' · ')}</small>
         ${c.length ? `<div class="quick" style="margin-top:6px">${c.map(x => `<button data-revmerge="${r.id}:${x.id}" title="מיזוג לתרומה קיימת">↔ ${esc(dname(x.donor_id) || x.donor_name || '')} ${fdate(x.d)} ${money(x.amount)}</button>`).join('')}</div>` : ''}</div>
         <div class="acts" style="flex-wrap:wrap"><button class="btn sm primary" data-revassign="${r.id}">שיוך לתורם</button><button class="btn sm" data-revnew="${r.id}">תורם חדש</button><button class="btn sm" data-revanon="${r.id}">לתורם ללא שם</button><button class="btn sm" data-revskip="${r.id}" title="לא להכניס">✕</button></div></li>`; }).join('')}</ul>
@@ -3403,10 +3435,18 @@ routes.nedarim = async v => {
       }
       if (ds.revmerge) {
         const [rid, did] = ds.revmerge.split(':').map(Number), r = findR(rid), o = S.donations.find(x => x.id === did);
-        if (!confirm(`לאחד את התרומה של "${r.payload.name || 'ללא שם'}" (${money(r.payload.amount)}) עם התרומה הקיימת של ${dname(o.donor_id) || o.donor_name || ''} מ-${fdate(o.d)}?\n\nרק אם זו אותה תרומה של אותו אדם. אם לא – לוחצים "ביטול" ובוחרים "שיוך לתורם".`)) return;
+        
         b.disabled = true;
         const r1 = await api.update('donations', did, {extra: {...(o.extra || {}), ...ndExtra(r.payload), merged_from: 'nedarim'}});
         applyRows('donations', r1); await done(r, 'merged:' + did); toast('מוזג לתרומה הקיימת ✓'); await learn(o.donor_id, r.payload);
+      }
+      if (ds.revsug) { const [rid, did] = ds.revsug.split(':').map(Number); const r = findR(rid); if (r) { e.target.disabled = true; await addDon(r, did); } return; }
+      if ('revsugall' in ds) {
+        
+        e.target.disabled = true; e.target.textContent = 'משייך…'; let n = 0;
+        for (const [rid, sg] of SUG) { const r = S.nedarim_review.find(x => x.id === rid && x.status === 'open'); if (!r) continue; try { await addDon(r, sg.d.id, true); n++; } catch (ex) { console.warn(ex); } }
+        try { await q(sb.rpc('nedarim_reassign')); } catch {}
+        await reload('donations', 'nedarim_review', 'donors'); toast(`שויכו ${n} תרומות ✓`); return;
       }
       if (ds.revassign) {
         const r = findR(ds.revassign);
