@@ -1,5 +1,5 @@
 {
-  "name": "gvia-chatzros",
+  "name": "gvia-chathros",
   "compatibility_date": "2025-06-01",
   "assets": { "directory": "./", "not_found_handling": "single-page-application" }
 }
