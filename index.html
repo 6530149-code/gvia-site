@@ -1512,10 +1512,24 @@ function donorForm(d, preset, onCreated) {
       }
       const r = isNew ? await api.insert('donors', [{id, ...row}]) : await api.update('donors', id, row);
       applyRows('donors', r);
+      if (isNew) { try { const n = await linkSameName(id); if (n) toast(`צורפו לכרטיס לבד ${n} רשומות באותו שם (יומן ההתרמה / נדרים פלוס) ✓`); } catch (ex) { console.warn(ex); } }
       if (isNew && onCreated) { await onCreated(id); return; }
       return () => { if (isNew) location.hash = 'donor/' + id; };
     },
   });
+}
+// כרטיס חדש: מצרפים אליו לבד את מה שמחכה באותו שם – יומן ההתרמה ("צריך לפתוח כרטיס") ונדרים פלוס
+const sameName2 = (a, b) => { const x = donorSkel(a), y = donorSkel(b); return x.length >= 2 && x.length === y.length && x.every(w => y.includes(w)); };
+async function linkSameName(did) {
+  const d = S.donors.find(x => x.id === did); if (!d) return 0;
+  const conflict = (ph, city) => { const a = phone9(ph), dp = phone9(d.phone); const ca = campKey(city || ''), dc = campKey(d.city || '');
+    return (a.length >= 9 && dp.length >= 9 && a !== dp) && (ca && dc && !ca.includes(dc) && !dc.includes(ca)); };
+  const cids = S.commitments.filter(c => !c.donor_id && c.donor_name && !isSummaryName(c.donor_name) && sameName2(c.donor_name, d.name) && !conflict(c.phone, c.city)).map(c => c.id);
+  for (let i = 0; i < cids.length; i += 100) await q(sb.from('commitments').update({donor_id: did}).in('id', cids.slice(i, i + 100)));
+  const revs = S.nedarim_review.filter(r => r.status === 'open' && !r.donor_id && r.payload?.name && sameName2(r.payload.name, d.name) && !conflict(r.payload.phone, r.payload.city || r.payload.address));
+  for (const r of revs) { const x = await api.insert('donations', [ndRow(r.payload, did)]); applyRowsQuiet('donations', x); applyRowsQuiet('nedarim_review', await api.update('nedarim_review', r.id, {status: 'done', resolution: 'added:' + did})); }
+  if (cids.length || revs.length) await reload('commitments', 'donations', 'nedarim_review');
+  return cids.length + revs.length;
 }
 const AUTO_C = 'אוטומטי – לפי המגבית';
 function donationForm(x = {}) {
@@ -2304,7 +2318,7 @@ function missingDonors() {
 /* ---- שמות דומים: הצעות לאיחוד כרטיסים כפולים ---- */
 const SK_FIN = {'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ'};
 const nameSkel = w => { w = w.replace(/[ךםןףץ]/g, c => SK_FIN[c]); return (w[0] + w.slice(1).replace(/[אויע]/g, '')).replace(/(.)\1+/g, '$1'); };
-const donorSkel = n => [...new Set(cashTok(String(n || '').replace(/\([^)]*\)/g, ' ').replace(/\s(ב"ר|בהר"ר|בן|ב"ה)\s.*$/, ' ')).map(nameSkel))];
+const donorSkel = n => [...new Set(cashTok(String(n || '').replace(/בן[\s\-]+ציון/g, 'בנציון').replace(/\([^)]*\)/g, ' ').replace(/\s(ב"ר|בהר"ר|ב"ה|בן(?!\s*ציון))\s.*$/, ' ')).map(nameSkel))];
 const phone9 = x => String(x || '').replace(/\D/g, '').replace(/^972/, '0').slice(-9);
 const dupIgnore = () => { const p = S.app_prefs.find(x => x.k === 'dup_ignore'); return new Set(Array.isArray(p?.v) ? p.v : []); };
 function similarDonors() {
@@ -2359,6 +2373,21 @@ function suggestDonor(name, ctx) {
   for (const [id, h] of hits) if (conflict(h.d)) hits.delete(id);
   const all = [...hits.values()], ex = all.filter(h => h.exact);
   return ex.length === 1 ? ex[0].d : all.length === 1 ? all[0].d : null;
+}
+// החלפת מספר תורם (למשל לקוד אי פי טי מהתוכנה): כרטיס חדש במספר הנכון, והכל עובר אליו
+function renumDialog(d) {
+  openForm({title: 'מספר תורם (קוד אי פי טי)', sub: `המספר הנוכחי: ${d.id}. מקלידים את המספר מתוכנת הסליקה – וכל התרומות, ההתחייבויות והשיחות עוברות למספר החדש.`,
+    fields: [{k: 'nid', label: 'מספר תורם חדש', t: 'number', req: true}], submitLabel: 'החלפה',
+    onSubmit: async v => {
+      const nid = +v.nid; if (!nid || nid === d.id) throw new Error('צריך מספר אחר');
+      if (D.donors.has(nid)) throw new Error(`מספר ${nid} כבר קיים (${D.donors.get(nid).n}). אם זה אותו אדם – "איחוד עם כרטיס אחר"`);
+      const src = S.donors.find(x => x.id === d.id), copy = {};
+      for (const k of ['name', 'title', 'first_name', 'family', 'city', 'address', 'phone', 'phone2', 'email', 'father', 'father_in_law', 'country', 'notes', 'extra']) copy[k] = src[k] ?? null;
+      copy.extra = copy.extra || {};
+      applyRowsQuiet('donors', await api.insert('donors', [{id: nid, ...copy}]));
+      try { await mergePair(nid, d.id); } catch (ex) { mergeErr(ex); return; }
+      await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review'); toast(`המספר הוחלף ל-${nid} ✓`); location.hash = 'donor/' + nid;
+    }});
 }
 function mergeDialog(d) {
   openForm({title: 'איחוד עם כרטיס אחר', sub: `"${esc(d.n)}" (מס׳ ${d.id}) פתוח פעמיים? בוחרים את הכרטיס השני – וכל התרומות, ההתחייבויות, השיחות ונדרים פלוס עוברים לכרטיס אחד.`,
@@ -2499,7 +2528,7 @@ routes.donor = (v, id) => {
   const f = (l, val) => val ? `<div><small>${esc(l)}</small>${val}</div>` : '';
   const ex = d.extra || {};
   v.innerHTML = `<div class="page-head"><div><a href="#donors">→ חזרה לתורמים</a></div><div class="page-actions">
-      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button><button class="btn" data-act="merge" title="אותו אדם פתוח בשני כרטיסים">🔗 איחוד עם כרטיס אחר</button></div></div>
+      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button><button class="btn" data-act="merge" title="אותו אדם פתוח בשני כרטיסים">🔗 איחוד עם כרטיס אחר</button><button class="btn" data-act="renum" title="להחליף למספר התורם (קוד אי פי טי) מתוכנת הסליקה">🔢 מספר תורם</button></div></div>
   <div class="card"><div class="profile">
     <div class="avatar">${esc(((d.family || d.n || '').match(/[א-תA-Za-z]/) || ['?'])[0])}</div>
     <div style="flex:1;min-width:200px"><h2>${esc([d.title, d.n].filter(Boolean).join(' '))}</h2>
@@ -2525,7 +2554,7 @@ routes.donor = (v, id) => {
     <button data-t="call">שיחות<span class="c"> ${calls.length}</span></button>
     <button data-t="fail">עסקאות שנכשלו<span class="c"> ${fails.length}</span></button>
   </div><div id="dT"></div>`;
-  v.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d), merge: () => mergeDialog(d)})[b.dataset.act](); };
+  v.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d), merge: () => mergeDialog(d), renum: () => renumDialog(d)})[b.dataset.act](); };
   const draw = () => {
     if (!dons.length) { $('#dChart').innerHTML = '<div class="empty">אין תרומות רשומות</div>'; return; }
     const first = dons[dons.length - 1].d, [fy, fm] = [+first.slice(0, 4), +first.slice(5, 7)], [ly, lm] = [+D.lastDate.slice(0, 4), +D.lastDate.slice(5, 7)];
@@ -3460,7 +3489,7 @@ routes.nedarim = async v => {
           const p = rs[0].payload, parts = (p.name || '').trim().split(/\s+/), tz = String(p.id_number || '').replace(/\D/g, '').replace(/^0+/, '');
           const row = {id: next++, family: parts[0] || '', first_name: parts.slice(1).join(' '), name: p.name.trim(), phone: p.phone || null, email: p.email || null, address: p.address || null, city: p.city || null,
             extra: tz.length >= 5 ? {id_number: tz, nd_ids: [tz]} : {}};
-          try { const x = await api.insert('donors', [row]); applyRowsQuiet('donors', x); for (const r of rs) await addDon(r, row.id, true); n++; } catch (ex) { console.warn(ex); }
+          try { const x = await api.insert('donors', [row]); applyRowsQuiet('donors', x); for (const r of rs) await addDon(r, row.id, true); await linkSameName(row.id); n++; } catch (ex) { console.warn(ex); }
         }
         try { await q(sb.rpc('nedarim_reassign')); } catch {}
         await reload('donations', 'nedarim_review', 'donors'); toast(`נפתחו ${n} כרטיסים חדשים ✓`); return;
