@@ -2417,20 +2417,23 @@ async function mergePair(keep, drop) {
 async function afterMerge(n) { await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review'); toast(`אוחדו ${n} כרטיסים ✓ – כל התרומות עברו לכרטיס שנשאר`); }
 const mergeErr = ex => toast(/merge_donors|does not exist|schema cache/i.test(ex.message) ? 'צריך להריץ קודם את עדכון 21 ב-Supabase' : 'שגיאה: ' + ex.message, true);
 /* ---- תורמים שנפתחו באתר ועוד אין להם קוד בתוכנת הסליקה (אי פי טי) ---- */
-const iptList = () => D.donorList.filter(needsIptFn());
+// כל מי שצריך להיכנס לתוכנה: כרטיסים שנפתחו באתר (מספר זמני) + שמות מיומן ההתרמה שעוד אין להם כרטיס
+const iptList = () => [...D.donorList.filter(needsIptFn()).map(d => Object.assign(d, {kind: 'כרטיס באתר'})),
+  ...missingDonors().map(m => ({kind: 'מיומן ההתרמה', miss: m, id: null, n: m.name, name: m.name, family: m.name.split(' ')[0], first_name: m.name.split(' ').slice(1).join(' '), phone: m.phone, city: m.city, total: m.paid, tz: ''}))];
 function iptSection() {
   const L = iptList(); if (!L.length) return '';
-  return `<details class="fold"><summary>🔢 לפתוח בתוכנת הסליקה (קוד אי פי טי) <b>${nf0.format(L.length)}</b> <span class="muted" style="font-weight:400">נפתחו באתר ועוד אין להם מספר מהתוכנה</span></summary>
+  return `<details class="fold"><summary>🔢 לפתוח בתוכנת הסליקה (קוד אי פי טי) <b>${nf0.format(L.length)}</b> <span class="muted" style="font-weight:400">כרטיסים שנפתחו באתר + שמות מיומן ההתרמה שאין להם כרטיס</span></summary>
     <div class="note" style="margin:10px 16px">1. <button class="btn sm primary" data-iptx>⬇ ייצוא לאקסל – להכנסה לתוכנה</button> &nbsp; 2. מכניסים לתוכנה (אפשר בייבוא מאקסל) &nbsp; 3. מייצאים מהתוכנה רשימת תורמים ← <label class="btn sm" style="cursor:pointer">⬆ ייבוא קודים מהתוכנה<input type="file" accept=".xlsx,.csv" data-ipti hidden></label> – והאתר מעדכן לכל אחד את המספר לבד (לפי ת"ז, טלפון או שם).</div><div id="tIpt"></div></details>`;
 }
 function bindIpt(v) {
   const el = $('#tIpt'); if (!el) return;
   const L = iptList();
-  DataTable(el, {id: 'ipt', rows: L, sort: 'n', dir: 1, exportName: 'לפתוח בתוכנה', onRow: r => location.hash = 'donor/' + r.id,
-    cols: [{k: 'id', label: 'מס׳ זמני', t: 'num', html: r => r.id}, {k: 'n', label: 'שם', html: r => donorLink(r.id, r.n)}, {k: 'tz', label: 'ת״ז'}, {k: 'phone', label: 'טלפון'}, {k: 'city', label: 'ישוב'}, {k: 'address', label: 'כתובת'}, {k: 'email', label: 'מייל'}, {k: 'total', label: 'תרם', t: 'money'}]});
+  DataTable(el, {id: 'ipt', rows: L, sort: 'n', dir: 1, exportName: 'לפתוח בתוכנה', onRow: r => { if (r.id) location.hash = 'donor/' + r.id; },
+    filters: [{k: 'kind', label: 'מקור'}],
+    cols: [{k: 'kind', label: 'מקור'}, {k: 'id', label: 'מס׳ זמני', t: 'num', html: r => r.id || ''}, {k: 'n', label: 'שם', html: r => r.id ? donorLink(r.id, r.n) : esc(r.n)}, {k: 'tz', label: 'ת״ז'}, {k: 'phone', label: 'טלפון'}, {k: 'city', label: 'ישוב'}, {k: 'address', label: 'כתובת'}, {k: 'email', label: 'מייל'}, {k: 'total', label: 'תרם', t: 'money'}]});
   $('[data-iptx]', v)?.addEventListener('click', e => { e.preventDefault(); e.stopPropagation();
-    exportXlsx('לפתוח בתוכנת הסליקה', ['שם משפחה', 'שם פרטי', 'תז_בעל', 'כתובת', 'ישוב', 'טלפון', 'טלפון נייד', 'אימייל', 'שם אביו', 'מס באתר'],
-      L.map(d => [d.family || d.n, d.first_name || '', d.tz || '', d.address || '', d.city || '', d.phone2 || '', d.phone || '', d.email || '', d.father || '', d.id])); });
+    exportXlsx('לפתוח בתוכנת הסליקה', ['שם משפחה', 'שם פרטי', 'תז_בעל', 'כתובת', 'ישוב', 'טלפון', 'טלפון נייד', 'אימייל', 'שם אביו', 'מס באתר', 'מקור'],
+      L.map(d => [d.family || d.n, d.first_name || '', d.tz || '', d.address || '', d.city || '', d.phone2 || '', d.phone || '', d.email || '', d.father || '', d.id || '', d.kind])); });
   $('[data-ipti]', v)?.addEventListener('change', async e => {
     const f = e.target.files[0]; if (!f) return;
     let sheets; try { sheets = /\.csv$/i.test(f.name) ? [{rows: parseCsv(await f.text())}] : await readXlsx(f); } catch (ex) { return toast('לא הצלחתי לקרוא את הקובץ: ' + ex.message, true); }
@@ -2445,7 +2448,16 @@ function bindIpt(v) {
     }
     if (!pairs.length) return toast('לא מצאתי בקובץ עמודת "מס תורם" עם שמות', true);
     let n = 0, skip = 0;
-    for (const d of iptList()) {
+    let made = 0, linked = 0;
+    for (const m of iptList().filter(x => x.miss)) {   // שם מהיומן: פותחים כרטיס במספר מהתוכנה (או מצרפים לכרטיס הקיים במספר הזה)
+      const hits = pairs.filter(p => sameName2(p.name, m.name)); if (hits.length !== 1) { skip++; continue; }
+      const h = hits[0];
+      try {
+        if (!D.donors.has(h.id)) { const parts = m.name.split(' '); applyRowsQuiet('donors', await api.insert('donors', [{id: h.id, name: m.name, family: parts[0], first_name: parts.slice(1).join(' '), phone: m.phone || null, city: m.city || null, extra: h.tz ? {id_number: h.tz, nd_ids: [h.tz]} : {}}])); made++; } else linked++;
+        await linkSameName(h.id);
+      } catch (ex) { console.warn(ex); skip++; }
+    }
+    for (const d of iptList().filter(x => x.id)) {
       const tz = String(d.tz || '').replace(/^0+/, ''), dp = [d.phone, d.phone2].map(phone9).filter(x => x.length >= 9);
       const m = (tz && pairs.filter(p => p.tz === tz)) || [];
       const hit = m.length === 1 ? m[0] : (() => { const byPh = pairs.filter(p => p.ph.some(x => dp.includes(x)) && sameName2(p.name, d.name)); if (byPh.length === 1) return byPh[0];
@@ -2454,7 +2466,7 @@ function bindIpt(v) {
       try { await renumDonor(d.id, hit.id); n++; } catch (ex) { console.warn(ex); skip++; }
     }
     await reload('donors', 'donations', 'commitments', 'calls', 'failed_charges', 'nedarim_review');
-    toast(`עודכנו ${n} מספרי תורם מהתוכנה ✓${skip ? ` · ${skip} לא נמצאו בקובץ (נשארים ברשימה)` : ''}`);
+    toast(`מהתוכנה: ${made} כרטיסים חדשים במספר הנכון · ${linked} צורפו לכרטיס קיים · ${n} מספרים הוחלפו ✓${skip ? ` · ${skip} לא נמצאו בקובץ (נשארים ברשימה)` : ''}`);
   });
 }
 function similarSection() {
