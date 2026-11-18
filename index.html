@@ -562,6 +562,7 @@ table.dt tr.crow.done td { background: color-mix(in srgb, #18a074 10%, var(--sur
 .cal-e{font-size:12px;padding:2px 6px;border-radius:7px;background:var(--accent-soft);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none}
 .cal-e.bd{background:color-mix(in srgb,#2a78d6 12%,var(--surface))}
 @media (max-width:640px){.cal-d{min-height:60px}.cal-e{font-size:10.5px}}
+.tbl-tools .ftyped{width:200px}
 </style>
 </head>
 <body>
@@ -687,7 +688,7 @@ function DataTable(el, opt) {
     ${opt.title ? `<div class="hd"><h3>${esc(opt.title)}</h3>${opt.hint ? `<span class="hint">${esc(opt.hint)}</span>` : ''}</div>` : ''}
     <div class="tbl-tools">
       <input class="input grow" type="search" placeholder="חיפוש…" aria-label="חיפוש בטבלה">
-      ${filters.map((f, i) => `<select data-f="${i}" aria-label="${esc(f.label)}"><option value="">${esc(f.label)}: הכל</option></select>`).join('')}
+      ${filters.map((f, i) => f.typed ? `<input class="input ftyped" data-f="${i}" list="dlf-${TKEY}-${i}" placeholder="${esc(f.label)}: הכל – הקלד" aria-label="${esc(f.label)}" autocomplete="off"><datalist id="dlf-${TKEY}-${i}"></datalist>` : `<select data-f="${i}" aria-label="${esc(f.label)}"><option value="">${esc(f.label)}: הכל</option></select>`).join('')}
       <button class="btn sm rst hidden" data-rst title="ניקוי החיפוש וכל הסינונים בטבלה">✕ איפוס סינון</button>
       <span class="count"></span>
       <button class="btn sm" data-x>ייצוא לאקסל</button>
@@ -699,16 +700,16 @@ function DataTable(el, opt) {
   q.value = st.q;
 
   const fillFilters = () => filters.forEach((f, i) => {
-    const s = el.querySelector(`select[data-f="${i}"]`);
+    const s = f.typed ? el.querySelector(`datalist[id="dlf-${TKEY}-${i}"]`) : el.querySelector(`select[data-f="${i}"]`);
     const vals = f.values || uniq(rows.map(r => f.get ? f.get(r) : r[f.k])).sort((a, b) => typeof a === 'number' ? b - a : String(a).localeCompare(String(b), 'he'));
-    s.innerHTML = `<option value="">${esc(f.label)}: הכל</option>` + vals.map(v => `<option>${esc(v)}</option>`).join('');
-    if (st.f[i]) s.value = st.f[i];
+    s.innerHTML = (f.typed ? '' : `<option value="">${esc(f.label)}: הכל</option>`) + vals.map(v => `<option>${esc(v)}</option>`).join('');
+    if (st.f[i]) (f.typed ? el.querySelector(`input[data-f="${i}"]`) : s).value = st.f[i];
   });
   const searchKeys = cols.filter(c => c.search !== false);
   function apply() {
     const qt = smartTokens(st.q);
     view = rows.filter(r => {
-      for (const [i, v] of Object.entries(st.f)) { if (!v) continue; const f = filters[i]; const rv = f.get ? f.get(r) : r[f.k]; if (String(rv ?? '') !== v) return false; }
+      for (const [i, v] of Object.entries(st.f)) { if (!v) continue; const f = filters[i]; const rv = f.get ? f.get(r) : r[f.k]; if (f.typed ? !norm(String(rv ?? '')).includes(norm(v)) : String(rv ?? '') !== v) return false; }
       if (!qt.length) return true;
       return smartScore(qt, searchKeys.map(c => c.text ? c.text(r) : val(r, c)).join(' ')) > 0;
     });
@@ -739,8 +740,9 @@ function DataTable(el, opt) {
     pager.innerHTML = view.length > st.shown ? `<span>מוצגות ${nf0.format(st.shown)} מתוך ${nf0.format(view.length)} – גוללים למטה להמשך</span><div class="btns"><button class="btn sm" data-more="1">הצג עוד</button><button class="btn sm" data-all="1">הצג הכל</button></div>` : '';
   }
   q.addEventListener('input', () => { st.q = q.value; st.shown = CHUNK; apply(); });
-  rst.addEventListener('click', () => { st.q = ''; q.value = ''; st.f = {}; el.querySelectorAll('select[data-f]').forEach(x => { x.value = ''; }); st.shown = CHUNK; apply(); });
-  el.addEventListener('change', e => { const i = e.target.dataset.f; if (i != null) { st.f[i] = e.target.value; st.shown = CHUNK; apply(); } });
+  rst.addEventListener('click', () => { st.q = ''; q.value = ''; st.f = {}; el.querySelectorAll('[data-f]').forEach(x => { x.value = ''; }); st.shown = CHUNK; apply(); });
+  el.addEventListener('input', e => { if (!e.target.matches('input[data-f]')) return; st.f[e.target.dataset.f] = e.target.value.trim(); st.shown = CHUNK; apply(); });
+  el.addEventListener('change', e => { if (e.target.matches('input[data-f]')) return; const i = e.target.dataset.f; if (i != null) { st.f[i] = e.target.value; st.shown = CHUNK; apply(); } });
   thead.addEventListener('click', e => { const th = e.target.closest('th'); if (!th) return; const k = th.dataset.k; st.dir = st.sort === k ? -st.dir : (cols.find(c => c.k === k).t === 'text' || !cols.find(c => c.k === k).t ? 1 : -1); st.sort = k; apply(); });
   pager.addEventListener('click', e => { if (e.target.dataset.all) { st.shown = view.length; render(); } else if (e.target.dataset.more) { st.shown += CHUNK; render(); } });
   const more = () => { if (view.length > st.shown) { st.shown += CHUNK; render(); } };
@@ -2796,7 +2798,7 @@ routes.donations = v => {
   v.onclick = null;
   v.innerHTML = head('תרומות', 'תרומות שנגבו – מתוכנת הסליקה ומהזנה ידנית · לחיצה על שורה לעריכה', addBtn('donation', '₪ תרומה חדשה')) + '<div id="t"></div>';
   DataTable($('#t'), {id: 'donations', rows: D.donations, sort: 'd', exportName: 'תרומות', onRow: donationForm,
-    filters: [{k: 'card', label: 'כרטיס תורם', get: r => r.donor_id ? 'יש כרטיס' : r.extra?.needs_card ? 'צריך לפתוח כרטיס' : 'בלי תורם'}, {k: 'y', label: 'שנה'}, {k: 'm', label: 'חודש', values: MONTHS.map((_, i) => i + 1)}, {k: 'campaign', label: 'מבצע'}, {k: 'method', label: 'אמצעי'}, {k: 'country', label: 'ארץ'}, {k: 'src', label: 'מקור', get: r => SRC[r.source] || r.source}, {k: 'city_', label: 'ישוב', get: cityWhy}],
+    filters: [{k: 'card', label: 'כרטיס תורם', get: r => r.donor_id ? 'יש כרטיס' : r.extra?.needs_card ? 'צריך לפתוח כרטיס' : 'בלי תורם'}, {k: 'y', label: 'שנה'}, {k: 'm', label: 'חודש', values: MONTHS.map((_, i) => i + 1)}, {k: 'campaign', label: 'מבצע'}, {k: 'method', label: 'אמצעי'}, {k: 'country', label: 'ארץ'}, {k: 'city_', label: 'ישוב', typed: true, get: cityWhy}, {k: 'src', label: 'מקור', get: r => SRC[r.source] || r.source}],
     cols: donationCols()});
 };
 routes.commits = v => {
@@ -2809,7 +2811,7 @@ routes.commits = v => {
     <div class="card"><div class="hd"><h3>לפי אופן התרמה</h3></div><div class="bd" id="cM"></div></div></div><div class="mt" id="t"></div>`;
   const top = (k, n) => [...groupBy(rows, c => c[k])].filter(([x]) => x).map(([x, a]) => ({label: x, value: sum(a, c => c.total), sub: a.length + ' רשומות'})).sort((a, b) => b.value - a.value).slice(0, n);
   hbars($('#cC'), top('campaign', 10)); hbars($('#cM'), top('mode', 10), {color: css('--s3')});
-  DataTable($('#t'), {id: 'commits', rows, sort: 'd', exportName: 'התחייבויות', onRow: commitmentForm, filters: [{k: 'yr', label: 'שנה', get: r => r.d ? r.d.slice(0, 4) : ''}, {k: 'state', label: 'מצב'}, {k: 'mode', label: 'אופן'}, {k: 'campaign', label: 'מגבית'}, {k: 'city_', label: 'ישוב', get: cityWhy}], cols: commitCols()});
+  DataTable($('#t'), {id: 'commits', rows, sort: 'd', exportName: 'התחייבויות', onRow: commitmentForm, filters: [{k: 'yr', label: 'שנה', get: r => r.d ? r.d.slice(0, 4) : ''}, {k: 'state', label: 'מצב'}, {k: 'mode', label: 'אופן'}, {k: 'campaign', label: 'מגבית'}, {k: 'city_', label: 'ישוב', typed: true, get: cityWhy}], cols: commitCols()});
 };
 /* ---------------- מגביות: ביצועים מול יעד (כמו "לוח סיכום") ---------------- */
 const campKey = x => String(x || '').replace(/[״”“]|''/g, '"').replace(/[׳’]/g, "'").replace(/\s+/g, ' ').trim();
