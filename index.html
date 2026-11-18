@@ -1252,7 +1252,7 @@ function buildCashOut() {
   for (const [ym, g] of prv) {
     const name = Object.entries(g.names).sort((a, b) => b[1] - a[1])[0][0] || 'פרטי';
     virt.push({id: 'prv' + ym, virtual: true, prvMonth: ym, d: monthEnd(ym), amount: Math.round(sum(g.rows, r => +r.amount) * 100) / 100, activity: 'בחצרות החיים', name, method: 'מזומן',
-      detail: `כל הוצאות חודש ${ym.slice(5)}/${ym.slice(2, 4)} – מ"פרטי" (${g.rows.length} שורות)`});
+      detail: `כל הוצאות חודש ${ym.slice(5)}/${ym.slice(2, 4)} – מ"פרטי" (${g.rows.length} שורות)${ym === today().slice(0, 7) ? ' · החודש הנוכחי – מתעדכן עם כל שורה חדשה' : ''}`});
   }
   D.cashOut = [...real, ...virt].sort((a, b) => (b.d || '').localeCompare(a.d || ''));
 }
@@ -3094,7 +3094,7 @@ routes.finance = (v, tab) => {
       <button data-t="summary">סיכום</button><button data-t="bank">תנועות בנק<span class="c"> ${D.bank.length}</span></button>
       <button data-t="cin">הכנסות מזומן<span class="c"> ${D.cashIn.length}</span></button><button data-t="cout">הוצאות מזומן<span class="c"> ${D.cashOut.length}</span></button>
       <button data-t="inv">חשבוניות – דרישות תשלום<span class="c"> ${D.invoices.length}</span></button>
-      <button data-t="sup">מצב חשבון ספקים</button><button data-t="year">דוח שנתי</button><button data-t="close">סגירת חודש</button><button data-t="prv">פרטי<span class="c"> ${S.private_ledger.length}</span></button>
+      <button data-t="sup">מצב חשבון ספקים</button><button data-t="year">דוח שנתי</button><button data-t="close">סגירת חודש</button><button data-t="prv" title="סה״כ ״פרטי״ בחודש הנוכחי">פרטי<span class="c"> החודש ${money(sum(S.private_ledger.filter(r => (r.per_year && r.per_month ? `${r.per_year}-${String(r.per_month).padStart(2, '0')}` : (r.d || '').slice(0, 7)) === today().slice(0, 7)), r => +r.amount || 0))}</span></button>
     </div><div id="fBody"></div>`;
   const body = $('#fBody');
   const tabs = {
@@ -3278,6 +3278,22 @@ function monthClose(body) {
     cols: [{k: 'section', label: 'סעיף הוצאה'}, {k: 'total', label: 'סה״כ הוצאה', t: 'money'}]});
 }
 /* ---------- הגיליון "פרטי" (כמו באקסל) – לא נכנס לחישובי הארגון ---------- */
+// סיכום "פרטי" לפי חודש – החודש הנוכחי תמיד למעלה
+function prvMonthSummary(rows) {
+  const ymOf = r => r.per_year && r.per_month ? `${r.per_year}-${String(r.per_month).padStart(2, '0')}` : (r.d || '').slice(0, 7);
+  const cur = today().slice(0, 7), prevD = new Date(+cur.slice(0, 4), +cur.slice(5) - 2, 1), prev = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`;
+  const g = {}; for (const r of rows) { const ym = ymOf(r); if (!ym) continue; (g[ym] = g[ym] || []).push(r); }
+  const lbl = ym => `${+ym.slice(5)}/${ym.slice(2, 4)}`;
+  const tot = ym => sum(g[ym] || [], r => +r.amount || 0);
+  const byName = Object.entries((g[cur] || []).reduce((o, r) => { const k = r.name || 'בלי שם'; o[k] = (o[k] || 0) + (+r.amount || 0); return o; }, {})).sort((a, b) => b[1] - a[1]);
+  const months = Object.keys(g).sort().reverse().slice(0, 12);
+  return `<div style="margin:0 0 14px">
+      <div class="grid kpis" style="margin:0">${kpi('החודש ' + lbl(cur) + ' – עד עכשיו', money(tot(cur)), nf0.format((g[cur] || []).length) + ' שורות')}${kpi('חודש קודם ' + lbl(prev), money(tot(prev)), nf0.format((g[prev] || []).length) + ' שורות')}</div>
+      ${byName.length ? `<div class="hint" style="margin-top:8px">החודש לפי שם: ${byName.map(([n, v]) => `<b>${esc(n)}</b> ${money(v)}`).join(' · ')}</div>` : ''}
+      <details class="mt"><summary>סיכום לפי חודשים</summary><table class="mini" style="margin-top:8px;min-width:280px"><tr><th>חודש</th><th>סה"כ</th><th>שורות</th></tr>
+        ${months.map(ym => `<tr><td>${lbl(ym)}${ym === cur ? ' (נוכחי)' : ''}</td><td>${money(tot(ym))}</td><td>${nf0.format(g[ym].length)}</td></tr>`).join('')}</table></details>
+    </div>`;
+}
 function privateTab(body) {
   const rows = S.private_ledger;
   const by = st => rows.filter(r => (r.status || '') === st);
@@ -3285,6 +3301,7 @@ function privateTab(body) {
       <button class="btn primary" id="prvAdd">＋ שורה</button>
       <label class="btn" style="cursor:pointer">📥 עדכון מהאקסל (הגיליון "פרטי")<input type="file" id="prvFile" accept=".xlsx" hidden></label>
       <span class="hint">כמו הגיליון "פרטי" באקסל · כל חודש נכנס להוצאות מזומן כשורת ריכוז אחת (מה שסומן "בחצרות" באקסל – כבר שם)</span></div>
+    ${prvMonthSummary(rows)}
     <div class="grid kpis">${kpi('בחצרות', money(sum(by('בחצרות'), r => r.amount)), nf0.format(by('בחצרות').length) + ' שורות')}${kpi('פרטי', money(sum(by('פרטי'), r => r.amount)), nf0.format(by('פרטי').length) + ' שורות')}${kpi('בלי סטטוס', money(sum(by(''), r => r.amount)), nf0.format(by('').length) + ' שורות')}</div>
     <div class="mt" id="prvT"></div>`;
   $('#prvAdd').onclick = () => privateForm({d: today(), per_year: +today().slice(0, 4), per_month: +today().slice(5, 7), status: 'פרטי', activity: 'בחצרות החיים', method: 'מזומן'}, body);
