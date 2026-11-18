@@ -1155,7 +1155,7 @@ function derive() {
 }
 function refresh(keep = true) {
   derive();
-  const n = D.todo.urgent;
+  let n = D.todo.urgent; try { n += specialsFor(addDays(today(), 1)).length; } catch {}
   const b = $('#todayBadge'); b.textContent = n; b.classList.toggle('hidden', !n);
   $('#footInfo').textContent = `${nf0.format(D.donorList.length)} תורמים · ${nf0.format(D.donations.length)} תרומות · תרומה אחרונה ${fdate(D.lastDate)}`;
   route(keep);
@@ -2210,7 +2210,7 @@ routes.today = v => {
   <div class="todo-grid">
     ${sec('rem', '⏰ תזכורות להתקשר', T.reminders, c => `<li><div class="main"><b>${donorLink(c.donor_id)}</b><small><span class="${c.next_date < t ? 'over' : ''}">${c.next_date < t ? 'באיחור · ' : ''}${fdate(c.next_date)}</span> · ${esc(c.result || '')}${c.notes ? ' · ' + esc(c.notes) : ''}</small></div><div class="acts">${callBtn(c.donor_id)}</div></li>`, {empty: 'אין תזכורות להיום'})}
     ${(() => { const tm = addDays(t, 1), L = [...specialsFor(tm).map(x => ({...x, when: 'מחר'})), ...specialsFor(t).map(x => ({...x, when: 'היום'}))];
-      return L.length ? sec('spec', '🕯 יארצייט / יום הולדת – מחר', L, x => `<li><div class="main"><b>${donorLink(x.d.id)}</b> · ${x.when}<small>${esc(specialLabel(x.e))}${x.check ? ' · לברר את המועד השנה' : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></div><div class="acts">${callBtn(x.d.id)}</div></li>`) : ''; })()}
+      return sec('spec', '🕯 יארצייט / יום הולדת – מחר', L, x => `<li><div class="main"><b>${donorLink(x.d.id)}</b> · ${x.when}<small>${esc(specialLabel(x.e))}${x.check ? ' · לברר את המועד השנה' : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></div><div class="acts">${callBtn(x.d.id)}</div></li>`, {empty: 'אין מחר יארצייט או יום הולדת. מוסיפים תאריכים בכרטיס התורם: "🕯 יארצייט / יום הולדת"'}); })()}
     ${sec('fail', '💳 עסקאות אשראי שנכשלו', T.failed, f => `<li><div class="main"><b>${donorLink(f.donor_id, f.name)}</b> · ${money(f.amount)}<small>${esc(f.error || '')} · ${f.card_last4 ? '•••• ' + esc(f.card_last4) : 'כרטיס —'} · ${esc(f.card_exp || '')} · ${esc(f.phone || '')}</small></div><div class="acts">${f.donor_id ? callBtn(f.donor_id) : ''}<button class="btn sm" data-failok="${f.id}">✓ טופל</button></div></li>`, {empty: 'אין עסקאות פתוחות'})}
     ${sec('stop', '🔁 הוראות קבע שנעצרו', T.stopped, d => `<li><div class="main"><b>${donorLink(d.id)}</b> · ${money(d.recAmt)} לחודש<small>חיוב אחרון ${fdate(d.recLast)} (${d.gap} ימים) · ${esc(d.phone || '')} · ${esc(d.city || '')}</small></div><div class="acts">${callBtn(d.id)}</div></li>`, {empty: 'כל הוראות הקבע פעילות'})}
     ${sec('fol', '📝 התחייבויות – הגיע מועד מעקב', T.follow, c => `<li><div class="main"><b>${donorLink(c.donor_id, c.donor_name)}</b> · ${money(c.total)}<small>מעקב ${fdate(c.follow_up)} · ${esc(c.campaign || '')} · ${esc(c.mode || '')}</small></div><div class="acts">${c.donor_id ? callBtn(c.donor_id) : ''}<button class="btn sm" data-commit="${c.id}">עדכון</button></div></li>`, {empty: `אין מעקבים להיום · ${nf0.format(T.openCommits.length)} התחייבויות פתוחות בסה״כ`})}
