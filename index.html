@@ -4432,7 +4432,7 @@ function wlCompute(f) {
     const country = wlCountry(d);
     if (f.countries.length && !f.countries.some(c => c === 'חו"ל' ? country !== 'ישראל' : c === country)) continue;
     if (cities.length && !cities.some(c => norm(d.city || '').includes(c) || norm(d.address || '').includes(c))) continue;
-    if (nq && !norm(d.sq || '').includes(nq)) continue;
+    if (nq && !norm((d.sq || '') + ' ' + (d.notes || '')).includes(nq)) continue;
     if (f.phone === 'yes' && !d.phone && !d.phone2) continue;
     if (f.phone === 'no' && (d.phone || d.phone2)) continue;
     if (f.ipt === 'yes' && d.id > 900000) continue;
@@ -4443,9 +4443,9 @@ function wlCompute(f) {
     if (f.commit === 'no' && d.openC) continue;
     const mk = d.extra?.marks || {};
     let ok = true;
-    for (const [k, vals] of Object.entries(f.marks || {})) { if (!vals || !vals.length) continue; const v = mk[k]; if (vals.includes('*') ? !v : !vals.includes(v)) { ok = false; break; } }
+    if (wlUS(f)) for (const [k, vals] of Object.entries(f.marks || {})) { if (!vals || !vals.length) continue; const v = mk[k]; if (vals.includes('*') ? !v : !vals.includes(v)) { ok = false; break; } }
     if (!ok) continue;
-    for (const [k, t] of Object.entries(f.markText || {})) { if (t && !norm(mk[k] || '').includes(norm(t))) { ok = false; break; } }
+    if (wlUS(f)) for (const [k, t] of Object.entries(f.markText || {})) { if (t && !norm(mk[k] || '').includes(norm(t))) { ok = false; break; } }
     if (!ok) continue;
     const dons = D.byDonor.get(d.id) || [];
     let amt = 0, cnt = 0, pAmt = 0, pCnt = 0, last = null;
@@ -4483,11 +4483,13 @@ function wlDescribe(f, R) {
   if (f.commit) parts.push('התחייבות פתוחה: ' + (f.commit === 'yes' ? 'יש' : 'אין'));
   if (f.phone) parts.push('טלפון: ' + (f.phone === 'yes' ? 'יש' : 'אין'));
   if (f.ipt) parts.push('מספר בתוכנה: ' + (f.ipt === 'yes' ? 'יש' : 'זמני'));
-  for (const [k, v] of Object.entries(f.marks || {})) if (v?.length) parts.push(`${k}: ${v.map(x => x === '*' ? 'יש סימון' : x).join(' / ')}`);
-  for (const [k, t] of Object.entries(f.markText || {})) if (t) parts.push(`${k} מכיל "${t}"`);
+  if (wlUS(f)) for (const [k, v] of Object.entries(f.marks || {})) if (v?.length) parts.push(`${k}: ${v.map(x => x === '*' ? 'יש סימון' : x).join(' / ')}`);
+  if (wlUS(f)) for (const [k, t] of Object.entries(f.markText || {})) if (t) parts.push(`${k} מכיל "${t}"`);
   if (f.q) parts.push(`חיפוש: "${f.q}"`);
   return parts;
 }
+// סימונים (V, דירוג) – רלוונטיים רק לחו"ל / ארה"ב
+const wlUS = f => (f.countries || []).some(c => c === 'ארה"ב' || c === 'חו"ל');
 const wlPresets = () => { const p = S.app_prefs.find(x => x.k === 'worklists'); return p?.v && typeof p.v === 'object' ? p.v : {}; };
 
 routes.trip = v => {
@@ -4518,7 +4520,7 @@ routes.trip = v => {
         <span class="wl-f grow2"><span>ישוב / שכונה (אפשר כמה – הקלד ו-Enter)</span>
           <span class="wl-chips">${f.cities.map((c, i) => `<span class="pill info">${esc(c)} <a href="#" data-wlcity="${i}" title="להסיר">✕</a></span>`).join('')}<input class="input" id="wlCityIn" list="wlCities" placeholder="הקלד ישוב…" autocomplete="off" style="min-width:160px;flex:1"></span>
           <datalist id="wlCities">${cityList.map(c => `<option>${esc(c)}</option>`).join('')}</datalist></span>
-        <label class="wl-f grow2"><span>חיפוש חופשי (שם, טלפון, שם האב…)</span><input class="input" data-wl="q" value="${esc(f.q)}" placeholder="חיפוש…"></label>
+        <label class="wl-f grow2"><span>חיפוש חופשי (שם, טלפון, שם האב, הערות…)</span><input class="input" data-wl="q" value="${esc(f.q)}" placeholder="חיפוש…"></label>
       </div>
       <div class="wl-row">
         <span class="wl-f"><span>סכום בתקופה (₪)</span><span style="display:flex;gap:6px">${num('minAmt', 'מ-')}${num('maxAmt', 'עד')}</span></span>
@@ -4526,7 +4528,7 @@ routes.trip = v => {
         <span class="wl-f"><span>שנה הכי גבוהה לפחות (₪)</span>${num('minYear', 'למשל 1000')}</span>
         ${yn('rec', 'הוראת קבע')}${yn('commit', 'התחייבות פתוחה')}${yn('phone', 'טלפון')}${yn('ipt', 'מספר בתוכנה', 'יש', 'זמני – בלי')}
       </div>
-      ${MK.length ? `<div class="wl-marks"><b>סימונים מהאקסלים</b> <span class="muted">– בוחרים ערך אחד או כמה; "יש סימון" = כל מי שמסומן</span><div class="wl-mk-list">${MK.map(m => {
+      ${MK.length && wlUS(f) ? `<div class="wl-marks"><b>סימונים מאקסל ארה"ב</b> <span class="muted">– V / VV / VVVV ודירוג; אפשר לבחור כמה. ההערות מהאקסל נמצאות בעמודת "הערות"</span><div class="wl-mk-list">${MK.map(m => {
         const chosen = f.marks[m.k] || [], txt = m.vals.length > 12;
         return txt ? `<label class="wl-mk ${f.markText[m.k] ? 'on' : ''}"><span>${esc(m.k)} <small class="muted">(${m.n})</small></span><input class="input" data-wlmt="${esc(m.k)}" value="${esc(f.markText[m.k] || '')}" placeholder="מכיל…" style="width:150px"></label>`
           : `<details class="wl-mk ${chosen.length ? 'on' : ''}"><summary>${esc(m.k)} <small class="muted">(${m.n})</small>${chosen.length ? `: <b>${esc(chosen.map(x => x === '*' ? 'יש סימון' : x).join(' / '))}</b>` : ''}</summary><div class="wl-mk-vals">
@@ -4547,7 +4549,7 @@ routes.trip = v => {
     WL.last = {rows, R, months, years};
     const gave = rows.filter(r => r.cnt);
     $('#wlSum').innerHTML = `<div class="grid kpis">${kpi('ברשימה', nf0.format(rows.length), wlDescribe(f, R).slice(0, 2).map(esc).join(' · '))}${kpi('תרמו בתקופה', nf0.format(gave.length), money(sum(gave, r => r.amt)))}${kpi('לא תרמו בתקופה', nf0.format(rows.length - gave.length), nf0.format(rows.filter(r => !r.cnt && r.pCnt).length) + ' מהם הפסיקו')}${kpi('בתקופה הקודמת', money(sum(rows, r => r.pAmt)), fdate(R.pFrom) + ' – ' + fdate(R.pTo))}</div>`;
-    const markCols = MK.filter(m => rows.some(r => r.marks[m.k])).slice(0, 6);
+    const markCols = wlUS(f) ? MK.filter(m => rows.some(r => r.marks[m.k])).slice(0, 6) : [];
     const shortM = months.length <= 13 ? months : [];
     const old = $('#wlT'), host = old.cloneNode(false); old.replaceWith(host);
     DataTable(host, {id: 'wl', rows, sort: 'amt', exportName: 'רשימת עבודה', onRow: r => (location.hash = 'donor/' + r.id), rowClass: r => r.cnt ? '' : r.pCnt ? 'wl-stop' : '',
@@ -4557,7 +4559,7 @@ routes.trip = v => {
         ...shortM.map(ym => ({k: 'm' + ym, label: wlYm(ym), t: 'money', get: r => r.byM[ym] || 0, html: r => r.byM[ym] ? money(r.byM[ym]) : '<span class="muted">–</span>'})),
         ...years.map(y => ({k: 'y' + y, label: 'שנת ' + y, t: 'money', get: r => r.byYear[y] || 0})),
         {k: 'last', label: 'תרומה אחרונה', t: 'date'}, {k: 'lastAmt', label: 'סכום אחרון', t: 'money'}, {k: 'rec', label: 'הו״ק'}, {k: 'openC', label: 'התחייבויות פתוחות', t: 'num'},
-        ...markCols.map(m => ({k: 'mk' + m.k, label: m.k, get: r => r.marks[m.k] || '', wrap: true}))]});
+        ...markCols.map(m => ({k: 'mk' + m.k, label: m.k, get: r => r.marks[m.k] || '', wrap: true})), {k: 'notes', label: 'הערות', get: r => r.d.notes || '', wrap: true}]});
   };
   const upd = () => { draw(); };
   v.onchange = e => {
@@ -4565,6 +4567,7 @@ routes.trip = v => {
     const t = e.target;
     if (t.dataset.wl) { f[t.dataset.wl] = t.value; if (t.dataset.wl === 'period') { $('#wlCustom').classList.toggle('hidden', t.value !== 'custom'); } upd(); return; }
     if (t.dataset.wlck) { const k = t.dataset.wlck; f[k] = [...v.querySelectorAll(`input[data-wlck="${k}"]:checked`)].map(x => x.value);
+      if (k === 'countries' && wlUS({countries: f[k]}) !== !!v.querySelector('.wl-marks')) { routes.trip(v); v.querySelector('[data-wlmulti="countries"]')?.setAttribute('open', ''); return; }
       const box = t.closest('details'); box.classList.toggle('on', !!f[k].length);
       const opts = k === 'statuses' ? WL_STATUS.filter(x => x[0]) : [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c])];
       box.querySelector('summary').textContent = multiLbl(k, opts, k === 'statuses' ? 'כולם' : 'כל הארצות'); upd(); return; }
@@ -4657,16 +4660,16 @@ ${sh.rows.length ? `<autoFilter ref="A${hr}:${col(ncol - 1)}${last}"/>` : ''}${m
 function wlExport(f) {
   const {rows, R, months, years} = WL.last || wlCompute(f);
   if (!rows.length) return toast('אין אף אחד ברשימה לפי הסינון', true);
-  const MK = wlMarkKeys().filter(m => rows.some(r => r.marks[m.k]));
+  const MK = wlUS(f) ? wlMarkKeys().filter(m => rows.some(r => r.marks[m.k])) : [];
   const desc = wlDescribe(f, R), made = `הופק ${fdate(today())} · ${nf0.format(rows.length)} אנשים`;
   const mm = months.length <= 24 ? months : months.slice(-24);
   const cols = [{label: 'מס׳', w: 8, t: 'num'}, {label: 'שם', w: 24}, {label: 'שם האב', w: 16}, {label: 'ישוב', w: 14}, {label: 'ארץ', w: 9}, {label: 'כתובת', w: 24}, {label: 'טלפון', w: 15}, {label: 'טלפון נוסף', w: 15},
     {label: 'מצב', w: 12}, {label: 'תרומות בתקופה', w: 10, t: 'num'}, {label: 'סה"כ בתקופה', w: 12, t: 'money'}, {label: 'תקופה קודמת', w: 12, t: 'money'},
     ...mm.map(ym => ({label: wlYm(ym), w: 9, t: 'month'})), ...years.map(y => ({label: 'שנת ' + y, w: 11, t: 'money'})),
     {label: 'תרומה אחרונה', w: 12}, {label: 'סכום אחרון', w: 11, t: 'money'}, {label: 'סה"כ כל השנים', w: 12, t: 'money'}, {label: 'תרומות סה"כ', w: 9, t: 'num'}, {label: 'הו"ק', w: 12}, {label: 'התחייבויות פתוחות', w: 10, t: 'num'},
-    ...MK.map(m => ({label: m.k, w: m.vals.length > 12 ? 26 : 12})), {label: 'הערות לשטח', w: 28}];
+    ...MK.map(m => ({label: m.k, w: 12})), {label: 'הערות', w: 40}, {label: 'הערות לשטח', w: 28}];
   const data = rows.map(r => [r.id, r.name, r.father, r.city, r.country, r.address, r.phone, r.phone2, r.state, r.cnt, r.amt, r.pAmt, ...mm.map(ym => r.byM[ym] || 0), ...years.map(y => r.byYear[y] || 0),
-    r.last ? fdate(r.last) : '', r.lastAmt || 0, r.total || 0, r.allCnt || 0, r.rec, r.openC || 0, ...MK.map(m => r.marks[m.k] || ''), '']);
+    r.last ? fdate(r.last) : '', r.lastAmt || 0, r.total || 0, r.allCnt || 0, r.rec, r.openC || 0, ...MK.map(m => r.marks[m.k] || ''), r.d.notes || '', '']);
   const total = cols.map((c, i) => i === 1 ? 'סה"כ' : c.t === 'money' || c.t === 'month' ? sum(data, r => +r[i] || 0) : c.t === 'num' && i > 0 ? sum(data, r => +r[i] || 0) : '');
   total[0] = '';
   const main = {name: 'רשימה', title: 'רשימת עבודה – בחצרות החיים', sub: [desc.join(' · '), made, 'צבע ירוק = חודש עם תרומה · ורוד = הפסיק (תרם בתקופה הקודמת ולא בזו)'], cols, rows: data, total, freezeCols: 2, rowStyle: i => rows[i].state === 'הפסיק' ? 'stop' : ''};
@@ -4708,14 +4711,14 @@ function marksForm(d) {
 function wlPrint(f) {
   const {rows, R, years} = WL.last || wlCompute(f);
   if (!rows.length) return toast('אין אף אחד ברשימה לפי הסינון', true);
-  const MK = wlMarkKeys().filter(m => m.vals.length <= 12 && rows.some(r => r.marks[m.k])).slice(0, 3);
+  const MK = wlUS(f) ? wlMarkKeys().filter(m => rows.some(r => r.marks[m.k])).slice(0, 3) : [];
   const ys = years.slice(0, 3);
   const byCity = [...groupBy(rows, r => (r.city || 'בלי ישוב') + (r.country !== 'ישראל' ? ' – ' + r.country : '')).entries()].sort((a, b) => a[0].localeCompare(b[0], 'he'));
   const m = n => n ? '₪' + nf0.format(Math.round(n)) : '–';
   const head = `<tr><th>#</th><th>מס׳</th><th>שם</th><th>שם האב</th><th>כתובת</th><th>טלפון</th><th>מצב</th><th>תרומות<br>בתקופה</th><th>סה״כ<br>בתקופה</th><th>תקופה<br>קודמת</th>${ys.map(y => `<th>${y}</th>`).join('')}<th>אחרונה</th>${MK.map(k => `<th>${esc(k.k)}</th>`).join('')}<th class="nt">הערות</th></tr>`;
   let i = 0;
   const body = byCity.map(([c, rs]) => `<tbody><tr class="grp"><td colspan="${11 + ys.length + MK.length}">${esc(c)} · ${nf0.format(rs.length)} · תרמו ${nf0.format(rs.filter(r => r.cnt).length)} · ${m(sum(rs, r => r.amt))}</td></tr>
-    ${rs.map(r => `<tr class="${r.state === 'הפסיק' ? 'stop' : ''}"><td>${++i}</td><td>${r.id > 900000 ? '' : r.id}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.father)}</td><td>${esc(r.address)}</td><td class="ph">${esc([r.phone, r.phone2].filter(Boolean).join(' · '))}</td><td>${esc(r.state)}</td>
+    ${rs.map(r => `<tr class="${r.state === 'הפסיק' ? 'stop' : ''}"><td>${++i}</td><td>${r.id > 900000 ? '' : r.id}</td><td class="nm">${esc(r.name)}${r.d.notes ? `<div class="dn">${esc(r.d.notes)}</div>` : ''}</td><td>${esc(r.father)}</td><td>${esc(r.address)}</td><td class="ph">${esc([r.phone, r.phone2].filter(Boolean).join(' · '))}</td><td>${esc(r.state)}</td>
       <td class="n">${r.cnt || ''}</td><td class="n">${m(r.amt)}</td><td class="n">${m(r.pAmt)}</td>${ys.map(y => `<td class="n">${m(r.byYear[y])}</td>`).join('')}<td class="n">${r.last ? fdate(r.last) + '<br>' + m(r.lastAmt) : '–'}</td>${MK.map(k => `<td>${esc(r.marks[k.k] || '')}</td>`).join('')}<td class="nt"></td></tr>`).join('')}</tbody>`).join('');
   const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>רשימת עבודה</title><style>
     @page{size:A4 landscape;margin:10mm}
@@ -4723,7 +4726,7 @@ function wlPrint(f) {
     h1{font-size:17px;color:#7c1a1a;margin:0 0 2px} .sub{color:#555;margin:0 0 8px;font-size:11px}
     table{width:100%;border-collapse:collapse} thead{display:table-header-group}
     th{background:#7c1a1a;color:#fff;font-weight:600;padding:4px 3px;border:1px solid #7c1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    td{border:1px solid #cfc3b0;padding:3px 4px;vertical-align:top} td.n{text-align:left;white-space:nowrap} td.ph{white-space:nowrap} td.nm{font-weight:600}
+    td{border:1px solid #cfc3b0;padding:3px 4px;vertical-align:top} td.n{text-align:left;white-space:nowrap} td.ph{white-space:nowrap} td.nm{font-weight:600} .dn{font-weight:400;font-size:9px;color:#666;white-space:pre-line}
     th.nt,td.nt{width:16%} tr{page-break-inside:avoid}
     tr.grp td{background:#f3e7cf;font-weight:700;font-size:11.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
     tr.stop td{background:#fbe3e3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
