@@ -1647,11 +1647,19 @@ function cashForm(kind, x = {}) {
     title: (isNew ? '' : 'עריכת ') + (kind === 'in' ? 'הכנסת מזומן' : 'הוצאת מזומן'), values: {d: today(), ...x},
     fields: [
       {k: 'd', label: 'תאריך', t: 'date', req: true}, {k: 'amount', label: 'סכום (₪)', t: 'money', req: true},
-      {k: 'activity', label: 'פעילות', t: 'list', opts: activities()}, {k: 'name', label: kind === 'in' ? 'מאת' : 'שולם ל'},
+      {k: 'activity', label: 'פעילות', t: 'list', opts: kind === 'out' ? ['פרטי', ...activities().filter(a => a !== 'פרטי')] : activities()}, {k: 'name', label: kind === 'in' ? 'מאת' : 'שולם ל'},
       {k: 'method', label: 'אופן תשלום', t: 'list', opts: uniqVals(S.cash, 'method')},
       {k: 'detail', label: 'פירוט', t: 'textarea'},
     ],
-    onSubmit: async v => { const r = isNew ? await api.insert('cash', [{...v, kind}]) : await api.update('cash', x.id, v); applyRows('cash', r); },
+    sub: kind === 'out' ? 'פעילות "פרטי" = נרשם בלשונית "פרטי" (ונכנס לריכוז החודשי שלה)' : undefined,
+    onSubmit: async v => {
+      if (kind === 'out' && v.activity === 'פרטי') {   // הוצאה פרטית – נרשמת בגיליון "פרטי"
+        const row = {status: 'פרטי', d: v.d, per_year: +v.d.slice(0, 4), per_month: +v.d.slice(5, 7), amount: v.amount, activity: 'בחצרות החיים', name: v.name || null, method: v.method || 'מזומן', detail: v.detail || null};
+        applyRowsQuiet('private_ledger', await api.insert('private_ledger', [row]));
+        if (!isNew) { await api.remove('cash', x.id); applyRows('cash', [x], true); } else refresh();
+        toast('נרשם ב"פרטי" ✓'); return;
+      }
+      const r = isNew ? await api.insert('cash', [{...v, kind}]) : await api.update('cash', x.id, v); applyRows('cash', r); },
     onDelete: isNew ? null : async () => { await api.remove('cash', x.id); applyRows('cash', [x], true); },
   });
 }
