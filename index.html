@@ -2784,11 +2784,19 @@ routes.monthly = v => {
 };
 
 /* ---------------- תרומות / התחייבויות / שיחות ---------------- */
+// ישוב לסינון – ואם חסר, למה חסר
+const cityWhy = r => {
+  const c = (r.city || '').trim(); if (c) return c;
+  if (!r.donor_id) return r.extra?.needs_card ? 'חסר ישוב – צריך לפתוח כרטיס תורם' : 'חסר ישוב – לא משויך לתורם';
+  const dn = D.donors.get(r.donor_id);
+  if (!dn) return 'חסר ישוב – כרטיס התורם לא נמצא';
+  return (dn.city || '').trim() || 'חסר ישוב – לא רשום בכרטיס התורם';
+};
 routes.donations = v => {
   v.onclick = null;
   v.innerHTML = head('תרומות', 'תרומות שנגבו – מתוכנת הסליקה ומהזנה ידנית · לחיצה על שורה לעריכה', addBtn('donation', '₪ תרומה חדשה')) + '<div id="t"></div>';
   DataTable($('#t'), {id: 'donations', rows: D.donations, sort: 'd', exportName: 'תרומות', onRow: donationForm,
-    filters: [{k: 'card', label: 'כרטיס תורם', get: r => r.donor_id ? 'יש כרטיס' : r.extra?.needs_card ? 'צריך לפתוח כרטיס' : 'בלי תורם'}, {k: 'y', label: 'שנה'}, {k: 'm', label: 'חודש', values: MONTHS.map((_, i) => i + 1)}, {k: 'campaign', label: 'מבצע'}, {k: 'method', label: 'אמצעי'}, {k: 'country', label: 'ארץ'}, {k: 'src', label: 'מקור', get: r => SRC[r.source] || r.source}, {k: 'city_', label: 'ישוב', get: r => (r.city || D.donors.get(r.donor_id)?.city || 'בלי ישוב').trim()}],
+    filters: [{k: 'card', label: 'כרטיס תורם', get: r => r.donor_id ? 'יש כרטיס' : r.extra?.needs_card ? 'צריך לפתוח כרטיס' : 'בלי תורם'}, {k: 'y', label: 'שנה'}, {k: 'm', label: 'חודש', values: MONTHS.map((_, i) => i + 1)}, {k: 'campaign', label: 'מבצע'}, {k: 'method', label: 'אמצעי'}, {k: 'country', label: 'ארץ'}, {k: 'src', label: 'מקור', get: r => SRC[r.source] || r.source}, {k: 'city_', label: 'ישוב', get: cityWhy}],
     cols: donationCols()});
 };
 routes.commits = v => {
@@ -2801,7 +2809,7 @@ routes.commits = v => {
     <div class="card"><div class="hd"><h3>לפי אופן התרמה</h3></div><div class="bd" id="cM"></div></div></div><div class="mt" id="t"></div>`;
   const top = (k, n) => [...groupBy(rows, c => c[k])].filter(([x]) => x).map(([x, a]) => ({label: x, value: sum(a, c => c.total), sub: a.length + ' רשומות'})).sort((a, b) => b.value - a.value).slice(0, n);
   hbars($('#cC'), top('campaign', 10)); hbars($('#cM'), top('mode', 10), {color: css('--s3')});
-  DataTable($('#t'), {id: 'commits', rows, sort: 'd', exportName: 'התחייבויות', onRow: commitmentForm, filters: [{k: 'yr', label: 'שנה', get: r => r.d ? r.d.slice(0, 4) : ''}, {k: 'state', label: 'מצב'}, {k: 'mode', label: 'אופן'}, {k: 'campaign', label: 'מגבית'}, {k: 'city_', label: 'ישוב', get: r => (r.city || D.donors.get(r.donor_id)?.city || 'בלי ישוב').trim()}], cols: commitCols()});
+  DataTable($('#t'), {id: 'commits', rows, sort: 'd', exportName: 'התחייבויות', onRow: commitmentForm, filters: [{k: 'yr', label: 'שנה', get: r => r.d ? r.d.slice(0, 4) : ''}, {k: 'state', label: 'מצב'}, {k: 'mode', label: 'אופן'}, {k: 'campaign', label: 'מגבית'}, {k: 'city_', label: 'ישוב', get: cityWhy}], cols: commitCols()});
 };
 /* ---------------- מגביות: ביצועים מול יעד (כמו "לוח סיכום") ---------------- */
 const campKey = x => String(x || '').replace(/[״”“]|''/g, '"').replace(/[׳’]/g, "'").replace(/\s+/g, ' ').trim();
