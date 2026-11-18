@@ -2161,6 +2161,29 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-addb
 
 /* ---------------- לטיפול היום ---------------- */
 const EXPANDED = new Set();
+/* ---- ימים מיוחדים: יארצייט / יום הולדת – לפי התאריך העברי, תזכורת יום לפני ---- */
+const HMONTHS = [['Tishri', 'תשרי'], ['Heshvan', 'חשוון'], ['Kislev', 'כסלו'], ['Tevet', 'טבת'], ['Shevat', 'שבט'], ['Adar', 'אדר'], ['Adar I', 'אדר א׳'], ['Adar II', 'אדר ב׳'], ['Nisan', 'ניסן'], ['Iyar', 'אייר'], ['Sivan', 'סיוון'], ['Tamuz', 'תמוז'], ['Av', 'אב'], ['Elul', 'אלול']];
+const HM_HE = Object.fromEntries(HMONTHS), HM_EN = Object.fromEntries(HMONTHS.map(([e, h]) => [h, e]));
+const HDAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ז׳', 'ח׳', 'ט׳', 'י׳', 'י״א', 'י״ב', 'י״ג', 'י״ד', 'ט״ו', 'ט״ז', 'י״ז', 'י״ח', 'י״ט', 'כ׳', 'כ״א', 'כ״ב', 'כ״ג', 'כ״ד', 'כ״ה', 'כ״ו', 'כ״ז', 'כ״ח', 'כ״ט', 'ל׳'];
+const HFMT = new Intl.DateTimeFormat('en-u-ca-hebrew', {day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'});
+const hparts = iso => { const o = {}; for (const p of HFMT.formatToParts(new Date(iso + 'T12:00:00Z'))) o[p.type] = p.value; return {day: +o.day, month: o.month, year: +o.year}; };
+const hLeap = y => ((7 * y + 1) % 19) < 7;
+const SPECIAL_TYPES = ['יארצייט', 'יום הולדת'];
+// האם התאריך העברי (יום, חודש) חל ביום הזה
+function specialOn(e, iso) {
+  const p = hparts(iso); let m = e.month;
+  if (m === 'Adar' && hLeap(p.year)) return (p.month === 'Adar I' || p.month === 'Adar II') && p.day === +e.day ? 'check' : null;   // שנה מעוברת – תזכורת בשני האדרים
+  if ((m === 'Adar I' || m === 'Adar II') && !hLeap(p.year)) m = 'Adar';
+  if (p.month === m && p.day === +e.day) return 'exact';
+  if (+e.day === 30 && p.month === m && p.day === 29 && hparts(addDays(iso, 1)).day === 1) return 'check';   // אין ל׳ בחודש השנה
+  return null;
+}
+const specialLabel = e => `${e.type || 'יארצייט'} · ${HDAYS[+e.day - 1] || e.day} ${HM_HE[e.month] || e.month}${e.note ? ' · ' + e.note : ''}`;
+function specialsFor(iso) {
+  const out = [];
+  for (const d of D.donorList) for (const e of d.extra?.dates || []) { const k = specialOn(e, iso); if (k) out.push({d, e, check: k === 'check'}); }
+  return out;
+}
 routes.today = v => {
   const T = D.todo, t = today();
   if (!D.donorList.length) {
@@ -2177,6 +2200,8 @@ routes.today = v => {
   ${(() => { const c = monthChecklist(true); return c.done < c.total ? `<a class="mc-line" href="#dash">✅ סגירת חודש ${ymLabel(c.ym)}: ${c.done}/${c.total} בוצעו – לרשימה ←</a>` : ''; })()}
   <div class="todo-grid">
     ${sec('rem', '⏰ תזכורות להתקשר', T.reminders, c => `<li><div class="main"><b>${donorLink(c.donor_id)}</b><small><span class="${c.next_date < t ? 'over' : ''}">${c.next_date < t ? 'באיחור · ' : ''}${fdate(c.next_date)}</span> · ${esc(c.result || '')}${c.notes ? ' · ' + esc(c.notes) : ''}</small></div><div class="acts">${callBtn(c.donor_id)}</div></li>`, {empty: 'אין תזכורות להיום'})}
+    ${(() => { const tm = addDays(t, 1), L = [...specialsFor(tm).map(x => ({...x, when: 'מחר'})), ...specialsFor(t).map(x => ({...x, when: 'היום'}))];
+      return L.length ? sec('spec', '🕯 יארצייט / יום הולדת – מחר', L, x => `<li><div class="main"><b>${donorLink(x.d.id)}</b> · ${x.when}<small>${esc(specialLabel(x.e))}${x.check ? ' · לברר את המועד השנה' : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></div><div class="acts">${callBtn(x.d.id)}</div></li>`) : ''; })()}
     ${sec('fail', '💳 עסקאות אשראי שנכשלו', T.failed, f => `<li><div class="main"><b>${donorLink(f.donor_id, f.name)}</b> · ${money(f.amount)}<small>${esc(f.error || '')} · ${f.card_last4 ? '•••• ' + esc(f.card_last4) : 'כרטיס —'} · ${esc(f.card_exp || '')} · ${esc(f.phone || '')}</small></div><div class="acts">${f.donor_id ? callBtn(f.donor_id) : ''}<button class="btn sm" data-failok="${f.id}">✓ טופל</button></div></li>`, {empty: 'אין עסקאות פתוחות'})}
     ${sec('stop', '🔁 הוראות קבע שנעצרו', T.stopped, d => `<li><div class="main"><b>${donorLink(d.id)}</b> · ${money(d.recAmt)} לחודש<small>חיוב אחרון ${fdate(d.recLast)} (${d.gap} ימים) · ${esc(d.phone || '')} · ${esc(d.city || '')}</small></div><div class="acts">${callBtn(d.id)}</div></li>`, {empty: 'כל הוראות הקבע פעילות'})}
     ${sec('fol', '📝 התחייבויות – הגיע מועד מעקב', T.follow, c => `<li><div class="main"><b>${donorLink(c.donor_id, c.donor_name)}</b> · ${money(c.total)}<small>מעקב ${fdate(c.follow_up)} · ${esc(c.campaign || '')} · ${esc(c.mode || '')}</small></div><div class="acts">${c.donor_id ? callBtn(c.donor_id) : ''}<button class="btn sm" data-commit="${c.id}">עדכון</button></div></li>`, {empty: `אין מעקבים להיום · ${nf0.format(T.openCommits.length)} התחייבויות פתוחות בסה״כ`})}
@@ -2388,6 +2413,22 @@ function suggestDonor(name, ctx) {
   return ex.length === 1 ? ex[0].d : all.length === 1 ? all[0].d : null;
 }
 // החלפת מספר תורם (למשל לקוד אי פי טי מהתוכנה): כרטיס חדש במספר הנכון, והכל עובר אליו
+async function saveSpecials(d, list) {
+  const src = S.donors.find(x => x.id === d.id), ex = {...(src.extra || {}), dates: list};
+  if (!list.length) delete ex.dates;
+  applyRows('donors', await api.update('donors', d.id, {extra: ex})); toast('נשמר ✓');
+}
+function specialForm(d) {
+  openForm({title: 'יארצייט / יום הולדת', sub: `${esc(d.n)} – תזכורת תופיע ב"לטיפול היום" יום לפני, בכל שנה (לפי התאריך העברי)`,
+    values: {type: 'יארצייט'},
+    fields: [{k: 'type', label: 'סוג', t: 'list', opts: SPECIAL_TYPES, req: true}, {k: 'day', label: 'יום בחודש', t: 'list', opts: HDAYS, req: true},
+      {k: 'month', label: 'חודש עברי', t: 'list', opts: HMONTHS.map(m => m[1]), req: true}, {k: 'note', label: 'של מי / הערה', t: 'text', full: true}],
+    onSubmit: async v => {
+      const day = HDAYS.indexOf(v.day) + 1, month = HM_EN[v.month];
+      if (!day) throw new Error('צריך לבחור יום מהרשימה'); if (!month) throw new Error('צריך לבחור חודש מהרשימה');
+      await saveSpecials(d, [...(d.extra?.dates || []), {type: v.type, day, month, note: v.note || null}]);
+    }});
+}
 function renumDialog(d) {
   openForm({title: 'מספר תורם (קוד אי פי טי)', sub: `המספר הנוכחי: ${d.id}. מקלידים את המספר מתוכנת הסליקה – וכל התרומות, ההתחייבויות והשיחות עוברות למספר החדש.`,
     fields: [{k: 'nid', label: 'מספר תורם חדש', t: 'number', req: true}], submitLabel: 'החלפה',
@@ -2590,7 +2631,7 @@ routes.donor = (v, id) => {
   const f = (l, val) => val ? `<div><small>${esc(l)}</small>${val}</div>` : '';
   const ex = d.extra || {};
   v.innerHTML = `<div class="page-head"><div><a href="#donors">→ חזרה לתורמים</a></div><div class="page-actions">
-      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button><button class="btn" data-act="merge" title="אותו אדם פתוח בשני כרטיסים">🔗 איחוד עם כרטיס אחר</button><button class="btn" data-act="renum" title="להחליף למספר התורם (קוד אי פי טי) מתוכנת הסליקה">🔢 מספר תורם</button></div></div>
+      <button class="btn primary" data-act="call">📞 תיעוד שיחה</button><button class="btn" data-act="don">₪ תרומה</button><button class="btn" data-act="com">📝 התחייבות</button><button class="btn" data-act="edit">✏ עריכה</button><button class="btn" data-act="merge" title="אותו אדם פתוח בשני כרטיסים">🔗 איחוד עם כרטיס אחר</button><button class="btn" data-act="renum" title="להחליף למספר התורם (קוד אי פי טי) מתוכנת הסליקה">🔢 מספר תורם</button><button class="btn" data-act="special" title="יארצייט / יום הולדת – תזכורת יום לפני">🕯 יארצייט / יום הולדת</button></div></div>
   <div class="card"><div class="profile">
     <div class="avatar">${esc(((d.family || d.n || '').match(/[א-תA-Za-z]/) || ['?'])[0])}</div>
     <div style="flex:1;min-width:200px"><h2>${esc([d.title, d.n].filter(Boolean).join(' '))}</h2>
@@ -2610,13 +2651,15 @@ routes.donor = (v, id) => {
     ${kpi('הוראת קבע', d.rec ? money(d.recAmt) : 'אין', d.rec ? 'חיוב אחרון ' + fdate(d.recLast) : '')}
     ${kpi('שיחה אחרונה', d.lastCall ? fdate(atDay(d.lastCall.at)) : '—', d.lastCall ? esc(d.lastCall.result || '') : '')}
   </div>
+  ${(d.extra?.dates || []).length ? `<div class="note mt" id="dSpec">🕯 ${(d.extra.dates).map((e, i) => `<span class="pill info">${esc(specialLabel(e))} <a href="#" data-specdel="${i}" title="למחוק" style="margin-inline-start:4px">✕</a></span>`).join(' ')} <small class="muted">– תזכורת ב"לטיפול היום" יום לפני</small></div>` : ''}
   <div class="card mt"><div class="hd"><h3>תרומות לפי חודש</h3></div><div class="bd" id="dChart"></div></div>
   <div class="subtabs" id="dTabs">
     <button data-t="don">תרומות והתחייבויות<span class="c"> ${dons.length}${coms.length ? ' + ' + coms.length : ''}</span></button>
     <button data-t="call">שיחות<span class="c"> ${calls.length}</span></button>
     <button data-t="fail">עסקאות שנכשלו<span class="c"> ${fails.length}</span></button>
   </div><div id="dT"></div>`;
-  v.onclick = e => { const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d), merge: () => mergeDialog(d), renum: () => renumDialog(d)})[b.dataset.act](); };
+  v.onclick = e => { const sd = e.target.closest('[data-specdel]'); if (sd) { e.preventDefault(); const L = [...(d.extra?.dates || [])]; L.splice(+sd.dataset.specdel, 1); saveSpecials(d, L); return; }
+    const b = e.target.closest('[data-act]'); if (!b) return; ({call: () => callForm({donor_id: d.id}), don: () => donationForm({donor_id: d.id}), com: () => commitmentForm({donor_id: d.id}), edit: () => donorForm(d), merge: () => mergeDialog(d), renum: () => renumDialog(d), special: () => specialForm(d)})[b.dataset.act](); };
   const draw = () => {
     if (!dons.length) { $('#dChart').innerHTML = '<div class="empty">אין תרומות רשומות</div>'; return; }
     const first = dons[dons.length - 1].d, [fy, fm] = [+first.slice(0, 4), +first.slice(5, 7)], [ly, lm] = [+D.lastDate.slice(0, 4), +D.lastDate.slice(5, 7)];
