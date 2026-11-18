@@ -4497,12 +4497,18 @@ routes.trip = v => {
   const f = WL.f = WL.f || wlDefault();
   const MK = wlMarkKeys();
   const countries = uniq(D.donorList.map(wlCountry)).sort((a, b) => a === 'ישראל' ? -1 : b === 'ישראל' ? 1 : a.localeCompare(b, 'he'));
-  const cityList = uniq(D.donorList.map(d => (d.city || '').trim()).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'he'));
+  // ערים לפי הארץ שנבחרה (או כולן), מהגדולה לקטנה
+  const cityCnt = new Map();
+  for (const d of D.donorList) { if (d.extra?.anon) continue; const c = (d.city || '').trim(); if (!c) continue; const co = wlCountry(d);
+    if ((f.countries || []).length && !(f.countries || []).some(x => x === 'חו"ל' ? co !== 'ישראל' : x === co)) continue; cityCnt.set(c, (cityCnt.get(c) || 0) + 1); }
+  for (const c of f.cities || []) if (!cityCnt.has(c)) cityCnt.set(c, 0);
+  const cityOpts = [...cityCnt.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'he')).map(([c, n]) => [c, `${c} (${nf0.format(n)})`]);
   const presets = wlPresets();
   wlNorm(f);
   const cntBy = {}; for (const d of D.donorList) if (!d.extra?.anon) { const c = wlCountry(d); cntBy[c] = (cntBy[c] || 0) + 1; }
   const multiLbl = (k, opts, all) => f[k].length ? f[k].map(x => (opts.find(o => o[0] === x)?.[1] || x).replace(/ \(.*$/, '').replace(/ – .*$/, '')).join(' / ') : all;
-  const multi = (k, opts, all) => `<details class="wl-multi ${f[k].length ? 'on' : ''}" data-wlmulti="${k}"><summary>${esc(multiLbl(k, opts, all))}</summary><div class="wl-mk-vals">
+  const multi = (k, opts, all, search) => `<details class="wl-multi ${f[k].length ? 'on' : ''}" data-wlmulti="${k}"><summary>${esc(multiLbl(k, opts, all))}</summary><div class="wl-mk-vals">
+      ${search ? `<input class="input wl-cs" data-wlcs="${k}" placeholder="${esc(search)}" autocomplete="off" style="margin-bottom:6px">` : ''}
       ${opts.map(([val, lbl]) => `<label><input type="checkbox" data-wlck="${k}" value="${esc(val)}"${f[k].includes(val) ? ' checked' : ''}> ${esc(lbl)}</label>`).join('')}
       <a href="#" data-wlclr="${k}" class="muted" style="margin-top:4px">ניקוי</a></div></details>`;
   const sel = (k, opts) => `<select data-wl="${k}">${opts.map(([val, lbl]) => `<option value="${esc(val)}"${String(f[k]) === String(val) ? ' selected' : ''}>${esc(lbl)}</option>`).join('')}</select>`;
@@ -4517,9 +4523,7 @@ routes.trip = v => {
         <span class="wl-f"><span>ארץ (אפשר כמה)</span>${multi('countries', [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c + ' (' + nf0.format(cntBy[c] || 0) + ')'])], 'כל הארצות')}</span>
       </div>
       <div class="wl-row">
-        <span class="wl-f grow2"><span>ישוב / שכונה (אפשר כמה – הקלד ו-Enter)</span>
-          <span class="wl-chips">${f.cities.map((c, i) => `<span class="pill info">${esc(c)} <a href="#" data-wlcity="${i}" title="להסיר">✕</a></span>`).join('')}<input class="input" id="wlCityIn" list="wlCities" placeholder="הקלד ישוב…" autocomplete="off" style="min-width:160px;flex:1"></span>
-          <datalist id="wlCities">${cityList.map(c => `<option>${esc(c)}</option>`).join('')}</datalist></span>
+        <span class="wl-f grow2"><span>ערים (אפשר כמה)${(f.countries || []).length ? ' – של ' + esc(f.countries.join(', ')) : ''}</span>${multi('cities', cityOpts, 'כל הערים', 'חיפוש עיר…')}</span>
         <label class="wl-f grow2"><span>חיפוש חופשי (שם, טלפון, שם האב, הערות…)</span><input class="input" data-wl="q" value="${esc(f.q)}" placeholder="חיפוש…"></label>
       </div>
       <div class="wl-row">
@@ -4567,22 +4571,21 @@ routes.trip = v => {
     const t = e.target;
     if (t.dataset.wl) { f[t.dataset.wl] = t.value; if (t.dataset.wl === 'period') { $('#wlCustom').classList.toggle('hidden', t.value !== 'custom'); } upd(); return; }
     if (t.dataset.wlck) { const k = t.dataset.wlck; f[k] = [...v.querySelectorAll(`input[data-wlck="${k}"]:checked`)].map(x => x.value);
-      if (k === 'countries' && wlUS({countries: f[k]}) !== !!v.querySelector('.wl-marks')) { routes.trip(v); v.querySelector('[data-wlmulti="countries"]')?.setAttribute('open', ''); return; }
+      if (k === 'countries') { routes.trip(v); v.querySelector('[data-wlmulti="countries"]')?.setAttribute('open', ''); return; }
       const box = t.closest('details'); box.classList.toggle('on', !!f[k].length);
-      const opts = k === 'statuses' ? WL_STATUS.filter(x => x[0]) : [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c])];
-      box.querySelector('summary').textContent = multiLbl(k, opts, k === 'statuses' ? 'כולם' : 'כל הארצות'); upd(); return; }
+      const opts = k === 'statuses' ? WL_STATUS.filter(x => x[0]) : k === 'cities' ? cityOpts : [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c])];
+      box.querySelector('summary').textContent = multiLbl(k, opts, k === 'statuses' ? 'כולם' : k === 'cities' ? 'כל הערים' : 'כל הארצות'); upd(); return; }
     if (t.dataset.wlm != null) { const k = t.dataset.wlm, all = [...v.querySelectorAll(`input[data-wlm="${CSS.escape(k)}"]:checked`)].map(x => x.value); if (all.length) f.marks[k] = all; else delete f.marks[k];
       const sm = t.closest('details').querySelector('summary b'); t.closest('details').classList.toggle('on', !!all.length); if (sm) sm.textContent = all.map(x => x === '*' ? 'יש סימון' : x).join(' / '); upd(); return; }
     if (t.matches('[data-wlpre]') && t.value) { WL.f = {...wlDefault(), ...JSON.parse(JSON.stringify(presets[t.value]))}; WL.preName = t.value; routes.trip(v); }
-    if (t.id === 'wlCityIn' && t.value.trim()) { addCity(t.value.trim()); }
   };
-  const addCity = c => { if (!f.cities.includes(c)) f.cities.push(c); routes.trip(v); setTimeout(() => $('#wlCityIn')?.focus(), 0); };
-  $('#wlCityIn').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.value.trim()) { e.preventDefault(); addCity(e.target.value.trim()); } });
   let tm = null;
   v.oninput = e => { if (!v.querySelector('.wl-card')) return; const t = e.target;
+    if (t.dataset.wlcs) { const qq = norm(t.value); t.parentElement.querySelectorAll('label').forEach(l => { l.style.display = !qq || norm(l.textContent).includes(qq) ? '' : 'none'; }); return; }
     if (t.dataset.wl && t.type !== 'date' && t.tagName === 'INPUT') { f[t.dataset.wl] = t.value; clearTimeout(tm); tm = setTimeout(upd, 300); }
     if (t.dataset.wlmt != null) { f.markText[t.dataset.wlmt] = t.value.trim(); t.closest('.wl-mk').classList.toggle('on', !!t.value.trim()); clearTimeout(tm); tm = setTimeout(upd, 300); } };
   v.onclick = async e => {
+    v.querySelectorAll('details.wl-multi[open], details.wl-mk[open]').forEach(dd => { if (!dd.contains(e.target)) dd.removeAttribute('open'); });
     const cl = e.target.closest('[data-wlclr]'); if (cl) { e.preventDefault(); f[cl.dataset.wlclr] = []; routes.trip(v); return; }
     const c = e.target.closest('[data-wlcity]'); if (c) { e.preventDefault(); f.cities.splice(+c.dataset.wlcity, 1); routes.trip(v); return; }
     if (e.target.closest('[data-wlreset]')) { WL.f = wlDefault(); routes.trip(v); return; }
