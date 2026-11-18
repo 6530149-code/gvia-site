@@ -553,6 +553,15 @@ table.dt tr.crow.done td { background: color-mix(in srgb, #18a074 10%, var(--sur
 /* נדרים פלוס: רשימת התרומות של אותו אדם + הצעת תורם */
 .ndgrp{margin-top:4px;font-size:12.5px}.ndgrp summary{cursor:pointer;color:var(--accent)}.ndgrp ul{margin:4px 0 0;padding-inline-start:18px;color:var(--ink-2)}
 .ndsug{margin-top:6px;padding:6px 10px;border-radius:10px;background:color-mix(in srgb,#18a074 9%,var(--surface));font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+/* לוח יארצייט */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.cal-h{font-size:12px;color:var(--muted);text-align:center;font-weight:600}
+.cal-d{min-height:86px;border:1px solid var(--tline,var(--border));border-radius:10px;padding:5px 6px;background:var(--surface);display:flex;flex-direction:column;gap:3px;min-width:0}
+.cal-d.today{outline:2px solid var(--gold);background:color-mix(in srgb,var(--gold) 8%,var(--surface))}
+.cal-n{display:flex;justify-content:space-between;align-items:baseline}.cal-n small{color:var(--muted);font-size:11px}
+.cal-e{font-size:12px;padding:2px 6px;border-radius:7px;background:var(--accent-soft);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none}
+.cal-e.bd{background:color-mix(in srgb,#2a78d6 12%,var(--surface))}
+@media (max-width:640px){.cal-d{min-height:60px}.cal-e{font-size:10.5px}}
 </style>
 </head>
 <body>
@@ -2848,6 +2857,56 @@ function campaignStats() {
       active: !!(g.d_from && g.d_from <= t && (g.d_to ? g.d_to >= t : g.d_from >= addDays(t, -45)))};
   });
 }
+// מגבית חודשית: נוצרת לפי החודש העברי, עם התאריכים של החודש
+function monthlyCampaignForm() {
+  const opts = [-2, -1, 0, 1, 2].map(o => { const st = hMonthStart(today(), o), p = hparts(st); let en = st; while (hparts(addDays(en, 1)).month === p.month) en = addDays(en, 1);
+    return {label: `מגבית חודשית – ${HM_HE[p.month]} ${p.year}`, d_from: st, d_to: en}; });
+  openForm({title: 'מגבית חודשית חדשה', sub: 'בוחרים חודש – והמגבית נפתחת עם התאריכים שלו. אחר כך: "🔗 שיוך תרומות למגבית".', values: {m: opts[2].label},
+    fields: [{k: 'm', label: 'חודש', t: 'list', opts: opts.map(o => o.label), req: true, full: true}, {k: 'target_year', label: 'יעד', t: 'money'}],
+    onSubmit: async v => {
+      const o = opts.find(x => x.label === v.m) || {label: v.m.trim()};
+      try { await q(sb.from('campaigns').upsert([{name: o.label, d_from: o.d_from || null, d_to: o.d_to || null, target_year: v.target_year || null, sort: Math.max(0, ...S.campaigns.map(c => c.sort || 0)) + 1}], {onConflict: 'name'})); }
+      catch (ex) { throw new Error(ex.message); }
+      await reload('campaigns'); store.set('campSel', campKey(o.label)); toast(`נפתחה "${o.label}" ✓`);
+    }});
+}
+// שיוך תרומות (נדרים פלוס / תוכנה / ידני) והכנסות מזומן למגבית – לפי טווח תאריכים
+function assignToCampaign(cur) {
+  const yest = addDays(today(), -1);
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box form" style="max-width:720px"><h3>שיוך תרומות למגבית "${esc(cur.name)}"</h3><p>בוחרים טווח תאריכים ומקורות – ורואים מה ישויך לפני שמאשרים.</p>
+    <div class="fgrid"><div><label>מתאריך</label><input type="date" id="asFrom" value="${cur.from || yest}"></div><div><label>עד תאריך</label><input type="date" id="asTo" value="${cur.to || yest}"></div>
+    <div class="full" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px">${[['nedarim', 'נדרים פלוס'], ['software', 'תוכנת הסליקה'], ['manual', 'ידני'], ['cash', 'הכנסות מזומן']].map(([k, l], i) => `<label style="display:flex;gap:6px;align-items:center;margin:0"><input type="checkbox" data-src="${k}" ${k === 'nedarim' || k === 'cash' ? 'checked' : ''} style="width:auto"> ${l}</label>`).join('')}</div>
+    <div class="full"><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="asGen" checked style="width:auto"> גם מה שרשום כללי ("בחצרות החיים") או בלי מגבית</label>
+    <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="asAll" style="width:auto"> גם מה ששויך כבר למגבית אחרת</label></div></div>
+    <div id="asPrev" class="mt" style="max-height:40vh;overflow:auto"></div>
+    <div class="row sp"><div class="row" style="margin:0"><button class="btn primary" id="asGo">לשייך</button><button class="btn" data-cancel>ביטול</button></div></div></div>`;
+  document.body.appendChild(m);
+  const gen = c => !c || /^בחצרות החיים$/.test(String(c).trim());
+  let pick = {dons: [], cash: []};
+  const calc = () => {
+    const f = $('#asFrom', m).value, t = $('#asTo', m).value, src = new Set([...m.querySelectorAll('[data-src]:checked')].map(x => x.dataset.src)), allC = $('#asAll', m).checked, genC = $('#asGen', m).checked;
+    const okCamp = c => campKey(c || '') !== campKey(cur.name) && (allC || (genC && gen(c)));
+    pick.dons = S.donations.filter(x => x.d >= f && x.d <= t && src.has(x.source) && okCamp(x.campaign));
+    pick.cash = src.has('cash') ? S.cash.filter(c => c.kind === 'in' && c.d >= f && c.d <= t && okCamp(c.activity)) : [];
+    const rows = [...pick.dons.map(x => [fdate(x.d), dname(x.donor_id) || x.donor_name || '', money(x.amount), SRC[x.source] || x.source, x.campaign || '—']), ...pick.cash.map(c => [fdate(c.d), c.name || c.detail || '', money(c.amount), 'מזומן', c.activity || '—'])];
+    $('#asPrev', m).innerHTML = `<div class="note"><b>${nf0.format(pick.dons.length)}</b> תרומות (${money(sum(pick.dons, x => x.amount))}) + <b>${nf0.format(pick.cash.length)}</b> הכנסות מזומן (${money(sum(pick.cash, x => x.amount))})</div>
+      ${rows.length ? `<table class="mini" style="width:100%;margin-top:8px"><tr><th>תאריך</th><th>מי</th><th>סכום</th><th>מקור</th><th>מגבית עכשיו</th></tr>${rows.slice(0, 300).map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table>` : ''}`;
+    $('#asGo', m).textContent = `לשייך ${nf0.format(pick.dons.length + pick.cash.length)} ל"${cur.name}"`;
+  };
+  m.addEventListener('change', calc); m.addEventListener('input', calc); calc();
+  m.querySelector('[data-cancel]').onclick = () => m.remove();
+  $('#asGo', m).onclick = async e => {
+    if (!pick.dons.length && !pick.cash.length) return toast('אין מה לשייך בטווח הזה', true);
+    e.target.disabled = true; e.target.textContent = 'משייך…';
+    try {
+      const ids = pick.dons.map(x => x.id).filter(id => typeof id === 'number'), cids = [...new Set([...pick.cash.map(c => c.id), ...pick.dons.filter(x => x._cash).map(x => x._cash.id)])];
+      for (let i = 0; i < ids.length; i += 200) await q(sb.from('donations').update({campaign: cur.name}).in('id', ids.slice(i, i + 200)));
+      for (let i = 0; i < cids.length; i += 200) await q(sb.from('cash').update({activity: cur.name}).in('id', cids.slice(i, i + 200)));
+      m.remove(); await reload('donations', 'cash'); toast(`שויכו ${ids.length} תרומות ו-${cids.length} הכנסות מזומן ל"${cur.name}" ✓`);
+    } catch (ex) { toast('שגיאה: ' + ex.message, true); e.target.disabled = false; }
+  };
+}
 function campaignForm(r) {
   const isNew = !r;
   openForm({title: isNew ? 'מגבית חדשה' : 'מגבית – ' + r.name, values: r ? {name: r.name, d_from: r.d_from, d_to: r.d_to, target_year: r.target_year, target_month: r.target_month, notes: r.notes} : {d_from: today()},
@@ -2868,10 +2927,12 @@ routes.campaigns = v => {
   const cur = rows.find(r => r.key === sel);
   const opt = r => `<option value="${esc(r.key)}" ${r.key === sel ? 'selected' : ''}>${esc(r.name)}${r.active ? ' (פעילה)' : ''}</option>`;
   v.innerHTML = head('מגביות', 'ביצועי כל מגבית מול היעד – כמו "לוח סיכום" באקסל. לחיצה על שורה לעריכת יעד ותאריכים.',
-    `<select id="campSel" aria-label="בחר מגבית">${rows.map(opt).join('')}</select><button class="btn primary" id="campNew">＋ מגבית חדשה</button>`) + `
+    `<select id="campSel" aria-label="בחר מגבית">${rows.map(opt).join('')}</select><button class="btn primary" id="campNew">＋ מגבית חדשה</button><button class="btn" id="campMonthly">＋ מגבית חודשית</button>${cur ? '<button class="btn" id="campAssign">🔗 שיוך תרומות למגבית</button>' : ''}`) + `
     <div id="cKpi"></div><div class="mt" id="cT"></div>`;
   $('#campSel').onchange = e => { store.set('campSel', e.target.value); routes.campaigns(v); };
   $('#campNew').onclick = () => campaignForm(null);
+  $('#campMonthly').onclick = () => monthlyCampaignForm();
+  if ($('#campAssign')) $('#campAssign').onclick = () => assignToCampaign(cur);
   if (cur) $('#cKpi').innerHTML = `<div class="grid kpis">
       ${kpi('סה״כ (התחייבות + שולם)', money(cur.total), cur.target_year ? `${Math.round(cur.pct * 100)}% מהיעד ${money(cur.target_year)}<div class="prog"><i style="width:${Math.min(100, Math.round(cur.pct * 100))}%"></i></div>` : '<a href="#" data-cedit>הגדרת יעד</a>')}
       ${kpi('שולם', money(cur.paid), `מתוכו חודשי ${money(cur.paidM)} · חד פעמי ${money(cur.paidOnce)}`)}
@@ -2961,9 +3022,34 @@ function callsDaily() {
   }
   return [...by.values()].map(g => ({...g, rate: g.total ? g.yes / g.total : 0}));
 }
+/* לוח שנה עברי של יארצייט וימי הולדת – חודש אחד, לחיצה על שם פותחת את הכרטיס */
+let CAL_OFF = 0;
+function hMonthStart(iso, off) {
+  let d = iso; while (hparts(d).day !== 1) d = addDays(d, -1);
+  for (let i = 0; i < Math.abs(off); i++) { if (off > 0) { d = addDays(d, 31); while (hparts(d).day !== 1) d = addDays(d, -1); } else { d = addDays(d, -2); while (hparts(d).day !== 1) d = addDays(d, -1); } }
+  return d;
+}
+function calendarHtml() {
+  const start = hMonthStart(today(), CAL_OFF), p0 = hparts(start), days = [];
+  for (let d = start; hparts(d).month === p0.month && days.length < 31; d = addDays(d, 1)) days.push(d);
+  const all = D.donorList.filter(x => (x.extra?.dates || []).length);
+  const cell = iso => { const hp = hparts(iso), L = [];
+    for (const d of all) for (const e of d.extra.dates) { const k = specialOn(e, iso); if (k) L.push({d, e, check: k === 'check'}); }
+    return `<div class="cal-d${iso === today() ? ' today' : ''}"><div class="cal-n"><b>${HDAYS[hp.day - 1]}</b><small>${+iso.slice(8)}/${+iso.slice(5, 7)}</small></div>
+      ${L.map(x => `<a href="#donor/${x.d.id}" class="cal-e ${x.e.type === 'יום הולדת' ? 'bd' : ''}" title="${esc(specialLabel(x.e))}">${x.e.type === 'יום הולדת' ? '🎂' : '🕯'} ${esc(x.d.n)}${x.check ? ' ?' : ''}</a>`).join('')}</div>`; };
+  const pad = new Date(start + 'T12:00:00Z').getUTCDay();
+  return `<div class="card"><div class="hd"><h3>🕯 לוח יארצייט וימי הולדת – ${HM_HE[p0.month]} ${p0.year}</h3>
+    <span class="row" style="margin:0;gap:6px"><button class="btn sm" data-cal="-1">◀ חודש קודם</button><button class="btn sm" data-cal="0">היום</button><button class="btn sm" data-cal="1">חודש הבא ▶</button></span></div>
+    <div class="bd"><div class="cal">${['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'].map(w => `<div class="cal-h">${w}</div>`).join('')}${'<div></div>'.repeat(pad)}${days.map(cell).join('')}</div>
+    ${all.length ? '' : '<div class="empty">עוד לא הוזנו תאריכים. בכרטיס התורם: "🕯 יארצייט / יום הולדת"</div>'}</div></div>`;
+}
 routes.calls = v => {
   v.onclick = null;
   v.innerHTML = head('שיחות ותזכורות', 'כל שיחה מתועדת; תאריך "להתקשר שוב" נכנס אוטומטית ל"לטיפול היום"', addBtn('call', '📞 תיעוד שיחה')) + '<div id="t1"></div><div class="mt" id="t2"></div>';
+  v.insertAdjacentHTML('afterbegin', '');
+  const calBox = document.createElement('div'); calBox.id = 'calBox'; calBox.className = 'mt'; $('#t1').before(calBox);
+  const drawCal = () => { calBox.innerHTML = calendarHtml(); };
+  drawCal(); calBox.onclick = e => { const b = e.target.closest('[data-cal]'); if (!b) return; CAL_OFF = +b.dataset.cal === 0 ? 0 : CAL_OFF + +b.dataset.cal; drawCal(); };
   const open = S.calls.filter(c => !c.done && c.next_date).sort((a, b) => a.next_date.localeCompare(b.next_date));
   DataTable($('#t1'), {id: 'rem', title: 'תזכורות פתוחות', rows: open, sort: 'next_date', dir: 1, exportName: 'תזכורות', onRow: callForm, cols: callCols()});
   $('#t2').insertAdjacentHTML('afterend', '<div class="mt" id="t3"></div>');
