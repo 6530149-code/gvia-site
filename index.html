@@ -581,6 +581,10 @@ details.wl-mk summary{cursor:pointer}
 .wl-mk-vals label{display:flex;gap:6px;align-items:center;white-space:nowrap}
 tr.wl-stop td{background:color-mix(in srgb,#e05050 9%,transparent)}
 @media print{.wl-card,#wlSum,.page-head .page-actions,nav,aside{display:none!important}}
+details.wl-multi{border:1px solid var(--border-2);border-radius:9px;background:var(--surface);padding:7px 10px;min-height:36px;position:relative;min-width:180px}
+details.wl-multi summary{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+details.wl-multi.on{border-color:var(--accent);font-weight:600}
+details.wl-multi[open] .wl-mk-vals{position:absolute;z-index:20;inset-inline-start:0;top:100%;margin-top:4px;background:var(--surface);border:1px solid var(--border-2);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.14);font-weight:400;min-width:260px}
 </style>
 </head>
 <body>
@@ -4376,7 +4380,7 @@ document.querySelectorAll('.tbl-wrap').forEach(topScroll);
    ========================================================= */
 const WL_PERIODS = [['m0', 'החודש הנוכחי'], ['1m', 'חודש אחרון (30 יום)'], ['3m', '3 חודשים אחרונים'], ['6m', 'חצי שנה אחרונה'], ['12m', 'שנה אחרונה (12 חודשים)'], ['24m', 'שנתיים אחרונות'], ['ytd', 'מתחילת השנה הנוכחית'], ['custom', 'טווח תאריכים…']];
 const WL_STATUS = [['', 'כולם'], ['gave', 'תרמו בתקופה'], ['not', 'לא תרמו בתקופה'], ['stopped', 'הפסיקו – תרמו בתקופה הקודמת ולא בזו'], ['dropped', 'ירדו – תרמו פחות מבתקופה הקודמת'], ['rose', 'עלו – תרמו יותר מבתקופה הקודמת'], ['new', 'חדשים – תרומה ראשונה בתקופה'], ['lapsed', 'תרמו פעם, לא בתקופה'], ['never', 'מעולם לא תרמו']];
-const wlDefault = () => ({q: '', country: '', cities: [], period: '12m', from: '', to: '', status: '', minAmt: '', maxAmt: '', minCnt: '', maxCnt: '', minYear: '', rec: '', commit: '', phone: '', ipt: '', marks: {}, markText: {}});
+const wlDefault = () => ({q: '', country: '', countries: [], statuses: [], cities: [], period: '12m', from: '', to: '', status: '', minAmt: '', maxAmt: '', minCnt: '', maxCnt: '', minYear: '', rec: '', commit: '', phone: '', ipt: '', marks: {}, markText: {}});
 const WL = {f: null};
 const wlCountry = d => {
   const c = String(d.country || '').trim(), city = String(d.city || '');
@@ -4410,14 +4414,23 @@ function wlMarkKeys() {
   return [...m.entries()].map(([k, vs]) => ({k, n: [...vs.values()].reduce((a, b) => a + b, 0), vals: [...vs.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'he', {numeric: true}))}))
     .sort((a, b) => b.n - a.n);
 }
+function wlNorm(f) {
+  f.statuses = f.statuses || []; f.countries = f.countries || [];
+  if (f.status) { if (!f.statuses.includes(f.status)) f.statuses.push(f.status); f.status = ''; }
+  if (f.country) { if (!f.countries.includes(f.country)) f.countries.push(f.country); f.country = ''; }
+  return f;
+}
+const wlStatusOk = (st, {cnt, pCnt, amt, pAmt, d, R}) => st === 'gave' ? cnt > 0 : st === 'not' ? !cnt : st === 'stopped' ? !cnt && pCnt > 0 : st === 'dropped' ? pCnt > 0 && amt < pAmt
+  : st === 'rose' ? cnt > 0 && amt > pAmt : st === 'new' ? cnt > 0 && d.first >= R.from : st === 'lapsed' ? !cnt && d.cnt > 0 : st === 'never' ? !d.cnt : true;
 function wlCompute(f) {
+  wlNorm(f);
   const R = wlRange(f), months = wlMonths(R.from, R.to), years = D.years.slice(0, 4);
   const cities = f.cities.map(c => norm(c)).filter(Boolean), nq = norm(f.q || '');
   const rows = [];
   for (const d of D.donorList) {
     if (d.extra?.anon) continue;
     const country = wlCountry(d);
-    if (f.country && (f.country === 'חו"ל' ? country === 'ישראל' : country !== f.country)) continue;
+    if (f.countries.length && !f.countries.some(c => c === 'חו"ל' ? country !== 'ישראל' : c === country)) continue;
     if (cities.length && !cities.some(c => norm(d.city || '').includes(c) || norm(d.address || '').includes(c))) continue;
     if (nq && !norm(d.sq || '').includes(nq)) continue;
     if (f.phone === 'yes' && !d.phone && !d.phone2) continue;
@@ -4442,15 +4455,7 @@ function wlCompute(f) {
       if (x.d >= R.from && x.d <= R.to) { amt += a; cnt++; byM[wlYmOf(x.d)] = (byM[wlYmOf(x.d)] || 0) + a; if (!last || x.d > last.d) last = x; }
       else if (x.d >= R.pFrom && x.d <= R.pTo) { pAmt += a; pCnt++; }
     }
-    const st = f.status;
-    if (st === 'gave' && !cnt) continue;
-    if (st === 'not' && cnt) continue;
-    if (st === 'stopped' && (cnt || !pCnt)) continue;
-    if (st === 'dropped' && !(pCnt && amt < pAmt)) continue;
-    if (st === 'rose' && !(cnt && amt > pAmt)) continue;
-    if (st === 'new' && !(cnt && d.first >= R.from)) continue;
-    if (st === 'lapsed' && (cnt || !d.cnt)) continue;
-    if (st === 'never' && d.cnt) continue;
+    if (f.statuses.length && !f.statuses.some(st => wlStatusOk(st, {cnt, pCnt, amt, pAmt, d, R}))) continue;
     if (f.minAmt !== '' && amt < +f.minAmt) continue;
     if (f.maxAmt !== '' && amt > +f.maxAmt) continue;
     if (f.minCnt !== '' && cnt < +f.minCnt) continue;
@@ -4467,8 +4472,9 @@ function wlCompute(f) {
 function wlDescribe(f, R) {
   const p = WL_PERIODS.find(x => x[0] === f.period)?.[1] || '';
   const parts = [`תקופה: ${p} (${fdate(R.from)} – ${fdate(R.to)})`];
-  if (f.status) parts.push(WL_STATUS.find(x => x[0] === f.status)[1]);
-  if (f.country) parts.push('ארץ: ' + f.country);
+  wlNorm(f);
+  if (f.statuses.length) parts.push('מצב: ' + f.statuses.map(x => WL_STATUS.find(y => y[0] === x)?.[1] || x).join(' / '));
+  if (f.countries.length) parts.push('ארץ: ' + f.countries.join(', '));
   if (f.cities.length) parts.push('ישוב: ' + f.cities.join(', '));
   if (f.minAmt !== '' || f.maxAmt !== '') parts.push(`סכום בתקופה: ${f.minAmt !== '' ? 'מ-' + money(+f.minAmt) : ''} ${f.maxAmt !== '' ? 'עד ' + money(+f.maxAmt) : ''}`.trim());
   if (f.minCnt !== '' || f.maxCnt !== '') parts.push(`מספר תרומות בתקופה: ${f.minCnt !== '' ? 'מ-' + f.minCnt : ''} ${f.maxCnt !== '' ? 'עד ' + f.maxCnt : ''}`.trim());
@@ -4491,6 +4497,12 @@ routes.trip = v => {
   const countries = uniq(D.donorList.map(wlCountry)).sort((a, b) => a === 'ישראל' ? -1 : b === 'ישראל' ? 1 : a.localeCompare(b, 'he'));
   const cityList = uniq(D.donorList.map(d => (d.city || '').trim()).filter(Boolean)).sort((a, b) => a.localeCompare(b, 'he'));
   const presets = wlPresets();
+  wlNorm(f);
+  const cntBy = {}; for (const d of D.donorList) if (!d.extra?.anon) { const c = wlCountry(d); cntBy[c] = (cntBy[c] || 0) + 1; }
+  const multiLbl = (k, opts, all) => f[k].length ? f[k].map(x => (opts.find(o => o[0] === x)?.[1] || x).replace(/ \(.*$/, '').replace(/ – .*$/, '')).join(' / ') : all;
+  const multi = (k, opts, all) => `<details class="wl-multi ${f[k].length ? 'on' : ''}" data-wlmulti="${k}"><summary>${esc(multiLbl(k, opts, all))}</summary><div class="wl-mk-vals">
+      ${opts.map(([val, lbl]) => `<label><input type="checkbox" data-wlck="${k}" value="${esc(val)}"${f[k].includes(val) ? ' checked' : ''}> ${esc(lbl)}</label>`).join('')}
+      <a href="#" data-wlclr="${k}" class="muted" style="margin-top:4px">ניקוי</a></div></details>`;
   const sel = (k, opts) => `<select data-wl="${k}">${opts.map(([val, lbl]) => `<option value="${esc(val)}"${String(f[k]) === String(val) ? ' selected' : ''}>${esc(lbl)}</option>`).join('')}</select>`;
   const yn = (k, lbl, yes = 'יש', no = 'אין') => `<label class="wl-f"><span>${lbl}</span>${sel(k, [['', 'לא משנה'], ['yes', yes], ['no', no]])}</label>`;
   const num = (k, ph) => `<input class="input" type="number" min="0" data-wl="${k}" value="${esc(f[k])}" placeholder="${ph}" style="width:110px">`;
@@ -4499,8 +4511,8 @@ routes.trip = v => {
       <div class="wl-row">
         <label class="wl-f"><span>תקופה</span>${sel('period', WL_PERIODS)}</label>
         <span class="wl-f ${f.period === 'custom' ? '' : 'hidden'}" id="wlCustom"><span>מתאריך – עד</span><span style="display:flex;gap:6px"><input class="input" type="date" data-wl="from" value="${esc(f.from)}"><input class="input" type="date" data-wl="to" value="${esc(f.to)}"></span></span>
-        <label class="wl-f grow2"><span>מצב תרומה</span>${sel('status', WL_STATUS)}</label>
-        <label class="wl-f"><span>ארץ</span>${sel('country', [['', 'כל הארצות'], ['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c])])}</label>
+        <span class="wl-f grow2"><span>מצב תרומה (אפשר כמה)</span>${multi('statuses', WL_STATUS.filter(x => x[0]), 'כולם')}</span>
+        <span class="wl-f"><span>ארץ (אפשר כמה)</span>${multi('countries', [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c + ' (' + nf0.format(cntBy[c] || 0) + ')'])], 'כל הארצות')}</span>
       </div>
       <div class="wl-row">
         <span class="wl-f grow2"><span>ישוב / שכונה (אפשר כמה – הקלד ו-Enter)</span>
@@ -4539,7 +4551,7 @@ routes.trip = v => {
     const shortM = months.length <= 13 ? months : [];
     const old = $('#wlT'), host = old.cloneNode(false); old.replaceWith(host);
     DataTable(host, {id: 'wl', rows, sort: 'amt', exportName: 'רשימת עבודה', onRow: r => (location.hash = 'donor/' + r.id), rowClass: r => r.cnt ? '' : r.pCnt ? 'wl-stop' : '',
-      cols: [{k: 'id', label: 'מס׳', t: 'num'}, {k: 'name', label: 'שם'}, {k: 'father', label: 'שם האב'}, {k: 'city', label: 'ישוב'}, {k: 'address', label: 'כתובת'}, {k: 'phone', label: 'טלפון', get: r => [r.phone, r.phone2].filter(Boolean).join(' · ')},
+      cols: [{k: 'id', label: 'מס׳', t: 'num'}, {k: 'name', label: 'שם'}, {k: 'father', label: 'שם האב'}, {k: 'city', label: 'ישוב'}, {k: 'country', label: 'ארץ'}, {k: 'address', label: 'כתובת'}, {k: 'phone', label: 'טלפון', get: r => [r.phone, r.phone2].filter(Boolean).join(' · ')},
         {k: 'state', label: 'מצב', html: r => pill(r.state, {'תרם': 'ok', 'עלה': 'ok', 'חדש': 'info', 'ירד': 'warn', 'הפסיק': 'crit'}[r.state] || '')},
         {k: 'cnt', label: 'תרומות בתקופה', t: 'num'}, {k: 'amt', label: 'סה״כ בתקופה', t: 'money'}, {k: 'pAmt', label: 'תקופה קודמת', t: 'money'},
         ...shortM.map(ym => ({k: 'm' + ym, label: wlYm(ym), t: 'money', get: r => r.byM[ym] || 0, html: r => r.byM[ym] ? money(r.byM[ym]) : '<span class="muted">–</span>'})),
@@ -4552,6 +4564,10 @@ routes.trip = v => {
     if (!v.querySelector('.wl-card')) return;
     const t = e.target;
     if (t.dataset.wl) { f[t.dataset.wl] = t.value; if (t.dataset.wl === 'period') { $('#wlCustom').classList.toggle('hidden', t.value !== 'custom'); } upd(); return; }
+    if (t.dataset.wlck) { const k = t.dataset.wlck; f[k] = [...v.querySelectorAll(`input[data-wlck="${k}"]:checked`)].map(x => x.value);
+      const box = t.closest('details'); box.classList.toggle('on', !!f[k].length);
+      const opts = k === 'statuses' ? WL_STATUS.filter(x => x[0]) : [['חו"ל', 'כל חו"ל'], ...countries.map(c => [c, c])];
+      box.querySelector('summary').textContent = multiLbl(k, opts, k === 'statuses' ? 'כולם' : 'כל הארצות'); upd(); return; }
     if (t.dataset.wlm != null) { const k = t.dataset.wlm, all = [...v.querySelectorAll(`input[data-wlm="${CSS.escape(k)}"]:checked`)].map(x => x.value); if (all.length) f.marks[k] = all; else delete f.marks[k];
       const sm = t.closest('details').querySelector('summary b'); t.closest('details').classList.toggle('on', !!all.length); if (sm) sm.textContent = all.map(x => x === '*' ? 'יש סימון' : x).join(' / '); upd(); return; }
     if (t.matches('[data-wlpre]') && t.value) { WL.f = {...wlDefault(), ...JSON.parse(JSON.stringify(presets[t.value]))}; WL.preName = t.value; routes.trip(v); }
@@ -4564,10 +4580,11 @@ routes.trip = v => {
     if (t.dataset.wl && t.type !== 'date' && t.tagName === 'INPUT') { f[t.dataset.wl] = t.value; clearTimeout(tm); tm = setTimeout(upd, 300); }
     if (t.dataset.wlmt != null) { f.markText[t.dataset.wlmt] = t.value.trim(); t.closest('.wl-mk').classList.toggle('on', !!t.value.trim()); clearTimeout(tm); tm = setTimeout(upd, 300); } };
   v.onclick = async e => {
+    const cl = e.target.closest('[data-wlclr]'); if (cl) { e.preventDefault(); f[cl.dataset.wlclr] = []; routes.trip(v); return; }
     const c = e.target.closest('[data-wlcity]'); if (c) { e.preventDefault(); f.cities.splice(+c.dataset.wlcity, 1); routes.trip(v); return; }
     if (e.target.closest('[data-wlreset]')) { WL.f = wlDefault(); routes.trip(v); return; }
     if (e.target.closest('[data-wlx]')) { wlExport(f); return; }
-    if (e.target.closest('[data-wlprint]')) { window.print(); return; }
+    if (e.target.closest('[data-wlprint]')) { wlPrint(f); return; }
     if (e.target.closest('[data-wlsave]')) {
       const n = prompt('שם לסינון (למשל: ארה"ב – חשון פ"ז VVVV)', WL.preName || ''); if (!n) return;
       try { await q(sb.from('app_prefs').upsert([{k: 'worklists', v: {...wlPresets(), [n.trim()]: f}}], {onConflict: 'k'})); await reload('app_prefs'); WL.preName = n.trim(); toast('הסינון נשמר ✓'); routes.trip(v); } catch (ex) { toast(ex.message, true); }
@@ -4643,18 +4660,18 @@ function wlExport(f) {
   const MK = wlMarkKeys().filter(m => rows.some(r => r.marks[m.k]));
   const desc = wlDescribe(f, R), made = `הופק ${fdate(today())} · ${nf0.format(rows.length)} אנשים`;
   const mm = months.length <= 24 ? months : months.slice(-24);
-  const cols = [{label: 'מס׳', w: 8, t: 'num'}, {label: 'שם', w: 24}, {label: 'שם האב', w: 16}, {label: 'ישוב', w: 14}, {label: 'כתובת', w: 24}, {label: 'טלפון', w: 15}, {label: 'טלפון נוסף', w: 15},
+  const cols = [{label: 'מס׳', w: 8, t: 'num'}, {label: 'שם', w: 24}, {label: 'שם האב', w: 16}, {label: 'ישוב', w: 14}, {label: 'ארץ', w: 9}, {label: 'כתובת', w: 24}, {label: 'טלפון', w: 15}, {label: 'טלפון נוסף', w: 15},
     {label: 'מצב', w: 12}, {label: 'תרומות בתקופה', w: 10, t: 'num'}, {label: 'סה"כ בתקופה', w: 12, t: 'money'}, {label: 'תקופה קודמת', w: 12, t: 'money'},
     ...mm.map(ym => ({label: wlYm(ym), w: 9, t: 'month'})), ...years.map(y => ({label: 'שנת ' + y, w: 11, t: 'money'})),
     {label: 'תרומה אחרונה', w: 12}, {label: 'סכום אחרון', w: 11, t: 'money'}, {label: 'סה"כ כל השנים', w: 12, t: 'money'}, {label: 'תרומות סה"כ', w: 9, t: 'num'}, {label: 'הו"ק', w: 12}, {label: 'התחייבויות פתוחות', w: 10, t: 'num'},
     ...MK.map(m => ({label: m.k, w: m.vals.length > 12 ? 26 : 12})), {label: 'הערות לשטח', w: 28}];
-  const data = rows.map(r => [r.id, r.name, r.father, r.city, r.address, r.phone, r.phone2, r.state, r.cnt, r.amt, r.pAmt, ...mm.map(ym => r.byM[ym] || 0), ...years.map(y => r.byYear[y] || 0),
+  const data = rows.map(r => [r.id, r.name, r.father, r.city, r.country, r.address, r.phone, r.phone2, r.state, r.cnt, r.amt, r.pAmt, ...mm.map(ym => r.byM[ym] || 0), ...years.map(y => r.byYear[y] || 0),
     r.last ? fdate(r.last) : '', r.lastAmt || 0, r.total || 0, r.allCnt || 0, r.rec, r.openC || 0, ...MK.map(m => r.marks[m.k] || ''), '']);
   const total = cols.map((c, i) => i === 1 ? 'סה"כ' : c.t === 'money' || c.t === 'month' ? sum(data, r => +r[i] || 0) : c.t === 'num' && i > 0 ? sum(data, r => +r[i] || 0) : '');
   total[0] = '';
   const main = {name: 'רשימה', title: 'רשימת עבודה – בחצרות החיים', sub: [desc.join(' · '), made, 'צבע ירוק = חודש עם תרומה · ורוד = הפסיק (תרם בתקופה הקודמת ולא בזו)'], cols, rows: data, total, freezeCols: 2, rowStyle: i => rows[i].state === 'הפסיק' ? 'stop' : ''};
   // סיכום לפי ישוב
-  const byCity = groupBy(rows, r => r.city || 'בלי ישוב');
+  const byCity = groupBy(rows, r => (r.city || 'בלי ישוב') + (r.country !== 'ישראל' ? ' (' + r.country + ')' : ''));
   const cRows = [...byCity.entries()].map(([c, rs]) => [c, rs.length, rs.filter(r => r.cnt).length, rs.filter(r => !r.cnt).length, rs.filter(r => r.state === 'הפסיק').length, sum(rs, r => r.amt), sum(rs, r => r.pAmt)]).sort((a, b) => b[5] - a[5] || b[1] - a[1]);
   const citySheet = {name: 'סיכום לפי ישוב', title: 'סיכום לפי ישוב', sub: [desc.join(' · ')], cols: [{label: 'ישוב', w: 22}, {label: 'אנשים', w: 9, t: 'num'}, {label: 'תרמו', w: 9, t: 'num'}, {label: 'לא תרמו', w: 9, t: 'num'}, {label: 'הפסיקו', w: 9, t: 'num'}, {label: 'סה"כ בתקופה', w: 13, t: 'money'}, {label: 'תקופה קודמת', w: 13, t: 'money'}],
     rows: cRows, total: ['סה"כ', ...[1, 2, 3, 4, 5, 6].map(i => sum(cRows, r => r[i]))]};
@@ -4663,12 +4680,12 @@ function wlExport(f) {
   const monthSheet = {name: 'לפי חודשים', title: 'מה היה בכל חודש', sub: [desc.join(' · ')], cols: [{label: 'חודש', w: 12}, {label: 'תרמו', w: 9, t: 'num'}, {label: 'סה"כ', w: 14, t: 'money'}], rows: mRows, total: ['סה"כ', '', sum(mRows, r => r[2])]};
   // כל התרומות בתקופה – שקיפות מלאה
   const ids = new Set(rows.map(r => r.id)), dl = [];
-  for (const x of D.donations) if (ids.has(x.donor_id) && x.d >= R.from && x.d <= R.to) { const d = D.donors.get(x.donor_id); dl.push([fdate(x.d), x.donor_id, d?.n || x.donor_name || '', d?.city || '', +x.amount || 0, x.campaign || '', x.method || '', SRC[x.source] || x.source || '', x.notes || '']); }
+  for (const x of D.donations) if (ids.has(x.donor_id) && x.d >= R.from && x.d <= R.to) { const d = D.donors.get(x.donor_id); dl.push([fdate(x.d), x.donor_id, d?.n || x.donor_name || '', d?.city || '', d ? wlCountry(d) : '', +x.amount || 0, x.campaign || '', x.method || '', SRC[x.source] || x.source || '', x.notes || '']); }
   dl.sort((a, b) => String(a[2]).localeCompare(String(b[2]), 'he'));
-  const donSheet = {name: 'כל התרומות בתקופה', title: 'כל התרומות בתקופה – של האנשים ברשימה', sub: [`${fdate(R.from)} – ${fdate(R.to)} · ${nf0.format(dl.length)} תרומות`], cols: [{label: 'תאריך', w: 11}, {label: 'מס׳', w: 8, t: 'num'}, {label: 'שם', w: 24}, {label: 'ישוב', w: 14}, {label: 'סכום', w: 11, t: 'money'}, {label: 'מבצע / מגבית', w: 22}, {label: 'אמצעי', w: 12}, {label: 'מקור', w: 12}, {label: 'הערות', w: 30}],
-    rows: dl, total: ['', '', 'סה"כ', '', sum(dl, r => r[4]), '', '', '', ''], freezeCols: 0};
+  const donSheet = {name: 'כל התרומות בתקופה', title: 'כל התרומות בתקופה – של האנשים ברשימה', sub: [`${fdate(R.from)} – ${fdate(R.to)} · ${nf0.format(dl.length)} תרומות`], cols: [{label: 'תאריך', w: 11}, {label: 'מס׳', w: 8, t: 'num'}, {label: 'שם', w: 24}, {label: 'ישוב', w: 14}, {label: 'ארץ', w: 9}, {label: 'סכום', w: 11, t: 'money'}, {label: 'מבצע / מגבית', w: 22}, {label: 'אמצעי', w: 12}, {label: 'מקור', w: 12}, {label: 'הערות', w: 30}],
+    rows: dl, total: ['', '', 'סה"כ', '', '', sum(dl, r => r[5]), '', '', '', ''], freezeCols: 0};
   const crit = {name: 'הסינון', title: 'לפי מה הרשימה נבנתה', sub: [made], cols: [{label: 'סינון', w: 90}], rows: desc.map(d => [d])};
-  prettyXlsx(`רשימת עבודה ${today()}${f.cities.length ? ' – ' + f.cities.slice(0, 3).join(' ') : f.country ? ' – ' + f.country : ''}`, [main, citySheet, monthSheet, donSheet, crit]);
+  prettyXlsx(`רשימת עבודה ${today()}${f.cities.length ? ' – ' + f.cities.slice(0, 3).join(' ') : f.countries.length ? ' – ' + f.countries.join(' ') : ''}`, [main, citySheet, monthSheet, donSheet, crit]);
   toast('הקובץ ירד ✓');
 }
 
@@ -4685,6 +4702,37 @@ function marksForm(d) {
       const src = S.donors.find(x => x.id === d.id), ex = {...(src.extra || {}), marks: m}; if (!Object.keys(m).length) delete ex.marks;
       applyRows('donors', await api.update('donors', d.id, {extra: ex})); toast('נשמר ✓');
     }});
+}
+
+/* הדפסה – עמוד נקי, מקובץ לפי ישוב, כותרות חוזרות בכל עמוד */
+function wlPrint(f) {
+  const {rows, R, years} = WL.last || wlCompute(f);
+  if (!rows.length) return toast('אין אף אחד ברשימה לפי הסינון', true);
+  const MK = wlMarkKeys().filter(m => m.vals.length <= 12 && rows.some(r => r.marks[m.k])).slice(0, 3);
+  const ys = years.slice(0, 3);
+  const byCity = [...groupBy(rows, r => (r.city || 'בלי ישוב') + (r.country !== 'ישראל' ? ' – ' + r.country : '')).entries()].sort((a, b) => a[0].localeCompare(b[0], 'he'));
+  const m = n => n ? '₪' + nf0.format(Math.round(n)) : '–';
+  const head = `<tr><th>#</th><th>מס׳</th><th>שם</th><th>שם האב</th><th>כתובת</th><th>טלפון</th><th>מצב</th><th>תרומות<br>בתקופה</th><th>סה״כ<br>בתקופה</th><th>תקופה<br>קודמת</th>${ys.map(y => `<th>${y}</th>`).join('')}<th>אחרונה</th>${MK.map(k => `<th>${esc(k.k)}</th>`).join('')}<th class="nt">הערות</th></tr>`;
+  let i = 0;
+  const body = byCity.map(([c, rs]) => `<tbody><tr class="grp"><td colspan="${11 + ys.length + MK.length}">${esc(c)} · ${nf0.format(rs.length)} · תרמו ${nf0.format(rs.filter(r => r.cnt).length)} · ${m(sum(rs, r => r.amt))}</td></tr>
+    ${rs.map(r => `<tr class="${r.state === 'הפסיק' ? 'stop' : ''}"><td>${++i}</td><td>${r.id > 900000 ? '' : r.id}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.father)}</td><td>${esc(r.address)}</td><td class="ph">${esc([r.phone, r.phone2].filter(Boolean).join(' · '))}</td><td>${esc(r.state)}</td>
+      <td class="n">${r.cnt || ''}</td><td class="n">${m(r.amt)}</td><td class="n">${m(r.pAmt)}</td>${ys.map(y => `<td class="n">${m(r.byYear[y])}</td>`).join('')}<td class="n">${r.last ? fdate(r.last) + '<br>' + m(r.lastAmt) : '–'}</td>${MK.map(k => `<td>${esc(r.marks[k.k] || '')}</td>`).join('')}<td class="nt"></td></tr>`).join('')}</tbody>`).join('');
+  const html = `<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>רשימת עבודה</title><style>
+    @page{size:A4 landscape;margin:10mm}
+    body{font-family:Arial,sans-serif;color:#222;margin:0;font-size:10.5px}
+    h1{font-size:17px;color:#7c1a1a;margin:0 0 2px} .sub{color:#555;margin:0 0 8px;font-size:11px}
+    table{width:100%;border-collapse:collapse} thead{display:table-header-group}
+    th{background:#7c1a1a;color:#fff;font-weight:600;padding:4px 3px;border:1px solid #7c1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    td{border:1px solid #cfc3b0;padding:3px 4px;vertical-align:top} td.n{text-align:left;white-space:nowrap} td.ph{white-space:nowrap} td.nm{font-weight:600}
+    th.nt,td.nt{width:16%} tr{page-break-inside:avoid}
+    tr.grp td{background:#f3e7cf;font-weight:700;font-size:11.5px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    tr.stop td{background:#fbe3e3;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    tbody{page-break-inside:auto} .bar{margin:8px 0} @media print{.bar{display:none}}
+  </style></head><body><div class="bar"><button onclick="print()">🖨 הדפסה</button></div>
+  <h1>רשימת עבודה – בחצרות החיים</h1><div class="sub">${esc(wlDescribe(f, R).join(' · '))}<br>הופק ${fdate(today())} · ${nf0.format(rows.length)} אנשים · תרמו בתקופה ${nf0.format(rows.filter(r => r.cnt).length)} · ${m(sum(rows, r => r.amt))}</div>
+  <table><thead>${head}</thead>${body}</table></body></html>`;
+  const w = window.open('', '_blank'); if (!w) return toast('הדפדפן חסם חלון חדש – צריך לאשר חלונות קופצים לאתר', true);
+  w.document.open(); w.document.write(html); w.document.close(); setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 400);
 }
 
 </script>
