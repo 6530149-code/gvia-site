@@ -688,6 +688,14 @@ nav.tabs a.nav-maint{margin-top:auto;opacity:.8;font-size:13px}
 .rep-t td{padding:8px 16px;border-top:1px solid var(--border)}
 .rep-t td.n{text-align:left;white-space:nowrap}
 .rep-t tfoot td{font-weight:700;background:color-mix(in srgb,var(--page) 50%,var(--surface))}
+.tk-hr .tk-cell{height:48px;min-height:48px;position:relative;padding:0;overflow:visible}
+.tk-span{position:absolute;z-index:2;box-sizing:border-box;padding:1px}
+.tk-span .tk{height:100%;box-sizing:border-box;overflow:hidden;align-items:flex-start;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.tk.sp{flex-direction:column;gap:0;padding:3px 6px 3px 18px;position:relative;font-size:12px;line-height:1.25}
+.tk.sp input{position:absolute;left:3px;top:4px;width:12px;height:12px;margin:0}
+.tk.sp a{display:flex;flex-direction:column;min-width:0;width:100%}
+.tk.sp .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.tk.sp small{color:#4a5a70;font-size:11px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -5289,7 +5297,7 @@ const taskDoneOn = (x, iso) => x.repeat ? (x.repeat_done || []).includes(iso) : 
 // כל מה שיש ביום: משימות + "להתקשר שוב" מהשיחות
 function tasksForDay(iso) {
   const out = [];
-  for (const x of S.tasks || []) if (taskOn(x, iso)) out.push({kind: 'task', x, id: x.id, t: x.t || '', title: x.title, done: taskDoneOn(x, iso), donor_id: x.donor_id});
+  for (const x of S.tasks || []) if (taskOn(x, iso)) out.push({kind: 'task', x, id: x.id, t: x.t || '', te: x.t_end || '', title: x.title, done: taskDoneOn(x, iso), donor_id: x.donor_id});
   for (const c of S.calls || []) if (!c.done && c.next_date === iso) out.push({kind: 'call', c, id: 'c' + c.id, t: '', title: 'להתקשר: ' + dname(c.donor_id), done: false, donor_id: c.donor_id});
   return out.sort((a, b) => (a.t || '99').localeCompare(b.t || '99'));
 }
@@ -5303,22 +5311,24 @@ async function toggleTaskDone(id, iso) {
 function taskForm(x = {}) {
   const isNew = !x.id;
   openForm({title: isNew ? 'משימה חדשה' : 'עריכת משימה', sub: 'בלי תאריך = נכנסת לרשימת "משימות בלי תאריך". בלי שעה = כל היום. משימה עם שעה – יגיע מייל תזכורת לפני (ולטלפון דרך אפליקציית ג׳ימייל).',
-    values: {title: x.title || '', d: x.d || '', t: x.t || '', rem: remLbl(isNew ? 30 : x.remind_min), repeat: REP_LBL[x.repeat || ''], donor: x.donor_id || null, notes: x.notes || ''},
-    fields: [{k: 'title', label: 'מה צריך לעשות', req: true, full: true}, {k: 'd', label: 'תאריך', t: 'date'}, {k: 't', label: 'שעה', t: 'time'}, {k: 'rem', label: 'תזכורת במייל (למשימה עם שעה)', t: 'list', opts: REMIND.map(r => r[1])},
+    values: {title: x.title || '', d: x.d || '', t: x.t || '', te: x.t_end || '', rem: remLbl(isNew ? 30 : x.remind_min), repeat: REP_LBL[x.repeat || ''], donor: x.donor_id || null, notes: x.notes || ''},
+    fields: [{k: 'title', label: 'מה צריך לעשות', req: true, full: true}, {k: 'd', label: 'תאריך', t: 'date'}, {k: 't', label: 'משעה', t: 'time'}, {k: 'te', label: 'עד שעה', t: 'time'}, {k: 'rem', label: 'תזכורת במייל (למשימה עם שעה)', t: 'list', opts: REMIND.map(r => r[1])},
       {k: 'repeat', label: 'חוזרת', t: 'list', opts: REPEATS.map(r => r[1])}, {k: 'donor', label: 'קשור לתורם (לא חובה)', t: 'donor'}, {k: 'notes', label: 'הערות', t: 'textarea'}],
+    onChange: (k, F) => { if (k === 't' && F.get('t') && !F.get('te')) { const [h, m] = F.get('t').split(':').map(Number); F.set('te', String(Math.min(23, h + 1)).padStart(2, '0') + ':' + String(m).padStart(2, '0')); } },
     onSubmit: async v => {
+      if (v.te && v.t && v.te <= v.t) throw new Error('"עד שעה" צריך להיות אחרי "משעה"');
       const rep = (REPEATS.find(r => r[1] === v.repeat) || ['', ''])[0] || null;
       if (rep && !v.d) throw new Error('משימה חוזרת צריכה תאריך התחלה');
       const rm = REMIND.find(r => r[1] === v.rem);
-      const row = {title: v.title, d: v.d || null, t: v.t || null, remind_min: rm ? rm[0] : 30, repeat: rep, donor_id: v.donor || null, notes: v.notes || null, updated_at: new Date().toISOString()};
+      const row = {title: v.title, d: v.d || null, t: v.t || null, t_end: v.t ? (v.te || null) : null, remind_min: rm ? rm[0] : 30, repeat: rep, donor_id: v.donor || null, notes: v.notes || null, updated_at: new Date().toISOString()};
       try { applyRows('tasks', isNew ? await api.insert('tasks', [row]) : await api.update('tasks', x.id, row)); }
       catch (ex) { throw new Error(/tasks|schema cache/i.test(ex.message) ? 'צריך להריץ קודם את עדכון 24' : ex.message); }
     },
     onDelete: isNew ? null : async () => { await api.remove('tasks', x.id); applyRows('tasks', [x], true); }});
 }
-const taskItemHtml = (it, iso, compact) => `<div class="tk ${it.kind === 'call' ? 'call' : ''}${it.done ? ' done' : ''}">
+const taskItemHtml = (it, iso, compact, span) => `<div class="tk ${it.kind === 'call' ? 'call' : ''}${it.done ? ' done' : ''}${span ? ' sp' : ''}" title="${esc((it.t ? it.t + (it.te ? '–' + it.te : '') + ' ' : '') + it.title)}">
   ${it.kind === 'task' ? `<input type="checkbox" data-taskdone="${it.id}" data-day="${iso}"${it.done ? ' checked' : ''} aria-label="בוצע">` : '<span class="tk-ic">📞</span>'}
-  <a href="#" ${it.kind === 'task' ? `data-task="${it.id}"` : `data-callrem="${it.c.id}"`}>${it.t ? `<b>${esc(it.t)}</b> ` : ''}${esc(it.title)}${it.x?.repeat && !compact ? ' <small class="muted">↻</small>' : ''}</a></div>`;
+  <a href="#" ${it.kind === 'task' ? `data-task="${it.id}"` : `data-callrem="${it.c.id}"`}>${span ? `<b class="tt">${esc(it.title)}</b>${it.t ? `<small dir="ltr">${esc(it.t)}${it.te ? '–' + esc(it.te) : ''}</small>` : ''}` : `${it.t ? `<b dir="ltr">${esc(it.t)}${it.te ? '–' + esc(it.te) : ''}</b> ` : ''}${esc(it.title)}`}${it.x?.repeat && !compact ? ' <small class="muted">↻</small>' : ''}</a></div>`;
 function myDayHtml(iso) {
   const L = tasksForDay(iso), und = (S.tasks || []).filter(x => !x.d && !x.done);
   return `<div class="myday-l">${L.length ? L.map(it => taskItemHtml(it, iso, true)).join('') : '<div class="allclear" style="padding:10px">אין משימות להיום</div>'}</div>
@@ -5332,7 +5342,17 @@ routes.tasks = v => {
   const days = TASK_VIEW === 'week' ? [0, 1, 2, 3, 4, 5, 6].map(i => addDays(base, i)) : [addDays(t, TASK_OFF)];
   const ctx = calCtx(), HOURS = [];
   for (let h = 7; h <= 22; h++) HOURS.push(String(h).padStart(2, '0'));
-  const per = days.map(iso => ({iso, items: tasksForDay(iso), ev: dayItems(iso, ctx).filter(x => x.t !== 'note'), notes: dayItems(iso, ctx).filter(x => x.t === 'note')}));
+  const RH = 48, mins = s => { const [a, b] = String(s).split(':').map(Number); return a * 60 + (b || 0); };
+  const layout = items => {   // משימה משעה עד שעה – גובה לפי משך, משימות חופפות זו ליד זו
+    const L = items.filter(it => it.t).map(it => { const s = Math.max(7 * 60, mins(it.t)), e = Math.max(s + 20, it.te ? mins(it.te) : s + 60); return {it, s, e}; }).sort((a, b) => a.s - b.s || b.e - a.e);
+    const lanes = [], out = {};
+    let grp = [], gEnd = -1;
+    const flush = () => { const n = Math.max(1, ...grp.map(o => o.l + 1)); grp.forEach(o => o.n = n); grp = []; };
+    for (const o of L) { if (o.s >= gEnd) { flush(); lanes.length = 0; } let l = lanes.findIndex(x => x <= o.s); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = o.e; o.l = l; grp.push(o); gEnd = Math.max(gEnd, o.e);
+      const hh = String(Math.floor(o.s / 60)).padStart(2, '0'); o.top = (o.s % 60) / 60 * RH; o.h = Math.max(26, (o.e - o.s) / 60 * RH - 3); (out[hh] = out[hh] || []).push(o); }
+    flush(); return out;
+  };
+  const per = days.map(iso => ({iso, items: tasksForDay(iso), lay: layout(tasksForDay(iso)), ev: dayItems(iso, ctx).filter(x => x.t !== 'note'), notes: dayItems(iso, ctx).filter(x => x.t === 'note')}));
   const wk = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
   const title = TASK_VIEW === 'week' ? `${hLabel(days[0])} – ${hLabel(days[6])} · ${fdate(days[0])} – ${fdate(days[6])}` : `${wday(days[0])} ${hLabel(days[0])} · ${fdate(days[0])}`;
   const und = S.tasks.filter(x => !x.d), rep = S.tasks.filter(x => x.repeat);
@@ -5346,11 +5366,11 @@ routes.tasks = v => {
         ${p.ev.length ? `<a class="tk-ev" href="#prep" title="${esc(p.ev.map(x => x.title).join(' · '))}">🕯 ${p.ev.length} ${p.ev.length === 1 ? 'אירוע' : 'אירועים'}</a>` : ''}
         ${p.notes.map(n => `<span class="tk-note">📝 ${esc(String(n.title).slice(0, 40))}</span>`).join('')}
         ${p.items.filter(it => !it.t).map(it => taskItemHtml(it, p.iso)).join('')}</span>`).join('')}</div>
-      ${HOURS.map(h => `<div class="tk-row"><span class="tk-h">${h}:00</span>${per.map(p => `<span class="tk-cell" data-slot="${p.iso}|${h}:00">${p.items.filter(it => it.t && it.t.slice(0, 2) === h).map(it => taskItemHtml(it, p.iso)).join('')}</span>`).join('')}</div>`).join('')}
+      ${HOURS.map(h => `<div class="tk-row tk-hr"><span class="tk-h">${h}:00</span>${per.map(p => `<span class="tk-cell" data-slot="${p.iso}|${h}:00">${(p.lay[h] || []).map(o => `<div class="tk-span" style="top:${o.top}px;height:${o.h}px;right:${o.l * 100 / o.n}%;width:calc(${100 / o.n}% - 3px)">${taskItemHtml(o.it, p.iso, false, true)}</div>`).join('')}</span>`).join('')}</div>`).join('')}
     </section>
     <aside class="tk-side">
       <div class="card"><div class="hd"><h3>משימות בלי תאריך</h3></div><div class="bd">${und.length ? und.map(x => taskItemHtml({kind: 'task', x, id: x.id, t: '', title: x.title, done: !!x.done}, null)).join('') : '<div class="muted">אין</div>'}</div></div>
-      <div class="card mt"><div class="hd"><h3>משימות חוזרות</h3></div><div class="bd">${rep.length ? rep.map(x => `<div class="tk-rep"><a href="#" data-task="${x.id}">${esc(x.title)}</a><small class="muted">${esc(REP_LBL[x.repeat])}${x.t ? ' · ' + esc(x.t) : ''}</small></div>`).join('') : '<div class="muted">אין. במשימה: "חוזרת" ← כל שבוע / כל חודש…</div>'}</div></div>
+      <div class="card mt"><div class="hd"><h3>משימות חוזרות</h3></div><div class="bd">${rep.length ? rep.map(x => `<div class="tk-rep"><a href="#" data-task="${x.id}">${esc(x.title)}</a><small class="muted">${esc(REP_LBL[x.repeat])}${x.t ? ' · ' + esc(x.t) + (x.t_end ? '–' + esc(x.t_end) : '') : ''}</small></div>`).join('') : '<div class="muted">אין. במשימה: "חוזרת" ← כל שבוע / כל חודש…</div>'}</div></div>
       <div class="hint mt">לחיצה על משבצת ריקה = משימה חדשה באותו יום ושעה · 📞 = "להתקשר שוב" מתיעוד שיחה · 🕯 = יארצייטים (לחיצה מעבירה ליארצייטים)</div>
     </aside></div>`;
   v.onclick = async e => {
