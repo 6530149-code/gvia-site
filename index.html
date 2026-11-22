@@ -593,6 +593,20 @@ details.wl-multi[open] .wl-mk-vals{position:absolute;z-index:20;inset-inline-sta
 .ev-main{flex:1 1 280px}
 .ev-donors{flex:2 1 380px;display:flex;flex-direction:column;gap:3px}
 .ev-d a[href^="tel:"]{margin-inline-start:8px;text-decoration:none;white-space:nowrap}
+/* לוח שנה */
+.cal-d{cursor:pointer}
+.cal-d.has{background:color-mix(in srgb,var(--gold,#c9a227) 7%,var(--surface))}
+.cal-e.nt{background:color-mix(in srgb,#3b82f6 12%,transparent)}
+.cal-more{font-size:10.5px;color:var(--ink-2);margin-top:2px}
+.cal-page{display:grid;grid-template-columns:minmax(0,2.2fr) minmax(280px,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.cal-page{grid-template-columns:1fr}}
+.dash-top-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:16px;align-items:start}
+@media (max-width:900px){.dash-top-grid{grid-template-columns:1fr}}
+.fx-notes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.fx-notes li{display:flex;justify-content:space-between;gap:10px;background:color-mix(in srgb,var(--gold,#c9a227) 10%,transparent);border-radius:8px;padding:7px 10px}
+.fx-notes a{text-decoration:none}
+.day-list{max-height:55vh;overflow:auto;margin-top:6px}
+.todo-list .ev-row{border:0;padding:2px 0}
 </style>
 </head>
 <body>
@@ -632,6 +646,7 @@ details.wl-multi[open] .wl-mk-vals{position:absolute;z-index:20;inset-inline-sta
     <nav class="tabs" id="nav">
       <a href="#today" data-r="today"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>לטיפול היום </span><span class="badge hidden" id="todayBadge"></span></a>
       <a href="#dash" data-r="dash"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>לוח בקרה</span></a>
+      <a href="#cal" data-r="cal"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M8 13h2M12 13h2M16 13h0M8 17h2M12 17h2"/></svg><span>לוח שנה</span></a>
       <a href="#donors" data-r="donors"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg><span>תורמים</span></a>
       <a href="#trip" data-r="trip"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h11M9 12h11M9 19h11"/><path d="M4 5l1 1 2-2M4 12l1 1 2-2M4 19l1 1 2-2"/></svg><span>רשימת עבודה</span></a>
       <a href="#donations" data-r="donations"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 6.2 5.3 5.3 0 0 1 21.3 12C19 16.6 12 21 12 21z"/></svg><span>תרומות</span></a>
@@ -1189,10 +1204,11 @@ function derive() {
 }
 function refresh(keep = true) {
   derive();
-  let n = D.todo.urgent; try { n += specialsFor(addDays(today(), 1)).length; } catch {}
+  let n = D.todo.urgent; try { n += upcoming(2).filter(x => x.when === 'מחר' && isReminder(x)).length; } catch {}
   const b = $('#todayBadge'); b.textContent = n; b.classList.toggle('hidden', !n);
   $('#footInfo').textContent = `${nf0.format(D.donorList.length)} תורמים · ${nf0.format(D.donations.length)} תרומות · תרומה אחרונה ${fdate(D.lastDate)}`;
   route(keep);
+  try { evPopupOnce(); } catch (ex) { console.warn(ex); }
 }
 
 /* רשימות "לטיפול היום" – מחושבות אוטומטית */
@@ -2251,8 +2267,8 @@ routes.today = v => {
   ${(() => { const c = monthChecklist(true); return c.done < c.total ? `<a class="mc-line" href="#dash">✅ סגירת חודש ${ymLabel(c.ym)}: ${c.done}/${c.total} בוצעו – לרשימה ←</a>` : ''; })()}
   <div class="todo-grid">
     ${sec('rem', '⏰ תזכורות להתקשר', T.reminders, c => `<li><div class="main"><b>${donorLink(c.donor_id)}</b><small><span class="${c.next_date < t ? 'over' : ''}">${c.next_date < t ? 'באיחור · ' : ''}${fdate(c.next_date)}</span> · ${esc(c.result || '')}${c.notes ? ' · ' + esc(c.notes) : ''}</small></div><div class="acts">${callBtn(c.donor_id)}</div></li>`, {empty: 'אין תזכורות להיום'})}
-    ${(() => { const tm = addDays(t, 1), L = [...specialsFor(tm).map(x => ({...x, when: 'מחר'})), ...specialsFor(t).map(x => ({...x, when: 'היום'}))];
-      return sec('spec', '🕯 יארצייט / יום הולדת – מחר', L, x => `<li><div class="main"><b>${donorLink(x.d.id)}</b> · ${x.when}<small>${esc(specialLabel(x.e))}${x.check ? ' · לברר את המועד השנה' : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></div><div class="acts">${callBtn(x.d.id)}</div></li>`, {empty: 'אין מחר יארצייט או יום הולדת. מוסיפים תאריכים בכרטיס התורם: "🕯 יארצייט / יום הולדת"'}); })()}
+    ${(() => { const L = upcoming(2).filter(isReminder).sort((a, b) => (b.when === 'מחר') - (a.when === 'מחר'));
+      return sec('spec', '🔔 אירועים – מחר והיום', L, x => `<li><div class="main"><small><b>${x.when}</b> · ${esc(hLabel(x.iso))}</small>${itemHtml(x)}</div><div class="acts">${x.donors[0]?.d ? callBtn(x.donors[0].d.id) : ''}</div></li>`, {empty: 'אין מחר אירועים. מוסיפים ב"לוח שנה" או ב"הכנה למגביות"'}); })()}
     ${sec('fail', '💳 עסקאות אשראי שנכשלו', T.failed, f => `<li><div class="main"><b>${donorLink(f.donor_id, f.name)}</b> · ${money(f.amount)}<small>${esc(f.error || '')} · ${f.card_last4 ? '•••• ' + esc(f.card_last4) : 'כרטיס —'} · ${esc(f.card_exp || '')} · ${esc(f.phone || '')}</small></div><div class="acts">${f.donor_id ? callBtn(f.donor_id) : ''}<button class="btn sm" data-failok="${f.id}">✓ טופל</button></div></li>`, {empty: 'אין עסקאות פתוחות'})}
     ${sec('stop', '🔁 הוראות קבע שנעצרו', T.stopped, d => `<li><div class="main"><b>${donorLink(d.id)}</b> · ${money(d.recAmt)} לחודש<small>חיוב אחרון ${fdate(d.recLast)} (${d.gap} ימים) · ${esc(d.phone || '')} · ${esc(d.city || '')}</small></div><div class="acts">${callBtn(d.id)}</div></li>`, {empty: 'כל הוראות הקבע פעילות'})}
     ${sec('fol', '📝 התחייבויות – הגיע מועד מעקב', T.follow, c => `<li><div class="main"><b>${donorLink(c.donor_id, c.donor_name)}</b> · ${money(c.total)}<small>מעקב ${fdate(c.follow_up)} · ${esc(c.campaign || '')} · ${esc(c.mode || '')}</small></div><div class="acts">${c.donor_id ? callBtn(c.donor_id) : ''}<button class="btn sm" data-commit="${c.id}">עדכון</button></div></li>`, {empty: `אין מעקבים להיום · ${nf0.format(T.openCommits.length)} התחייבויות פתוחות בסה״כ`})}
@@ -2333,7 +2349,8 @@ routes.dash = v => {
   v.onclick = null;
   const yr = +store.get('dashYear', D.years[0]) || D.years[0];
   const year = D.years.includes(yr) ? yr : D.years[0];
-  v.innerHTML = head('לוח בקרה', `נתוני תרומות עד ${fdate(D.lastDate)}`, yearSelect('dy', year)) + monthChecklist() + '<div id="dashBody" class="mt"></div>';
+  v.innerHTML = head('לוח בקרה', `נתוני תרומות עד ${fdate(D.lastDate)}`, yearSelect('dy', year)) + monthChecklist() + '<div id="dashTop" class="dash-top mt"></div><div id="dashBody" class="mt"></div>';
+  try { dashTop($('#dashTop', v)); } catch (ex) { console.warn(ex); }
   bindChecklist(v); loadBackupStatus().then(ch => ch && location.hash === '#dash' && routes.dash(v));
   $('#dy').onchange = e => { store.set('dashYear', e.target.value); routes.dash(v); };
   const ld = D.lastDate, md = ld.slice(5);
@@ -3107,8 +3124,7 @@ routes.calls = v => {
   v.innerHTML = head('שיחות ותזכורות', 'כל שיחה מתועדת; תאריך "להתקשר שוב" נכנס אוטומטית ל"לטיפול היום"', addBtn('call', '📞 תיעוד שיחה')) + '<div id="t1"></div><div class="mt" id="t2"></div>';
   v.insertAdjacentHTML('afterbegin', '');
   const calBox = document.createElement('div'); calBox.id = 'calBox'; calBox.className = 'mt'; $('#t1').before(calBox);
-  const drawCal = () => { calBox.innerHTML = calendarHtml(); };
-  drawCal(); calBox.onclick = e => { const b = e.target.closest('[data-cal]'); if (!b) return; CAL_OFF = +b.dataset.cal === 0 ? 0 : CAL_OFF + +b.dataset.cal; drawCal(); };
+  calMount(calBox, {compact: true});
   const open = S.calls.filter(c => !c.done && c.next_date).sort((a, b) => a.next_date.localeCompare(b.next_date));
   DataTable($('#t1'), {id: 'rem', title: 'תזכורות פתוחות', rows: open, sort: 'next_date', dir: 1, exportName: 'תזכורות', onRow: callForm, cols: callCols()});
   $('#t2').insertAdjacentHTML('afterend', '<div class="mt" id="t3"></div>');
@@ -4944,6 +4960,152 @@ function evPrint() {
   const w = window.open('', '_blank'); if (!w) return toast('הדפדפן חסם חלון חדש – צריך לאשר חלונות קופצים לאתר', true);
   w.document.open(); w.document.write(`<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>אירועים</title><style>@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:11px;margin:0}h1{font-size:16px;color:#7c1a1a;margin:0 0 4px}table{width:100%;border-collapse:collapse}thead{display:table-header-group}th{background:#7c1a1a;color:#fff;padding:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}td{border:1px solid #cfc3b0;padding:4px;vertical-align:top}td.nm{font-weight:600}td.ph{white-space:nowrap}td.nt{width:22%}tr{page-break-inside:avoid}tr.grp td{background:#f3e7cf;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact}.bar{margin:6px 0}@media print{.bar{display:none}}</style></head><body><div class="bar"><button onclick="print()">🖨 הדפסה</button></div><h1>אירועים ויארצייטים – ${fdate(start)} – ${fdate(end)}</h1><table><thead><tr><th>של מי</th><th>תורמים משויכים</th><th>טלפונים</th><th>הערה</th><th>הערות</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
   w.document.close(); setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 400);
+}
+
+/* =========================================================
+   לוח שנה עברי: אירועים (הכנה למגביות), יארצייטים מכרטיסי תורמים,
+   הערות לפי תאריך (חד-פעמי או כל שנה בתאריך העברי) והערות קבועות.
+   תזכורת קופצת פעם ביום על מה שיש מחר.
+   ========================================================= */
+const prefV = (k, def) => { const p = (S.app_prefs || []).find(x => x.k === k); return p && p.v != null ? p.v : def; };
+async function prefSet(k, v) { await q(sb.from('app_prefs').upsert([{k, v}], {onConflict: 'k'})); await reload('app_prefs'); }
+const calNotes = () => { const v = prefV('cal_notes', []); return Array.isArray(v) ? v : []; };
+const fixedNotes = () => { const v = prefV('fixed_notes', []); return Array.isArray(v) ? v : []; };
+const KIND_ICON = {'יארצייט': '🕯', 'הילולא': '🔥', 'יום הולדת': '🎂', 'אחר': '⭐'};
+// כל מה שחל ביום מסוים
+function calCtx() { return {ix: evIndex(S.events || []), nix: evIndex(calNotes().filter(n => n.every).map(n => ({...n})))}; }
+function dayItems(iso, ctx = calCtx()) {
+  const out = [];
+  for (const {e, check} of evOnDay(ctx.ix, iso)) out.push({t: 'ev', e, check, kind: e.kind, title: e.title, donors: evDonors(e)});
+  for (const x of specialsFor(iso)) out.push({t: 'card', e: x.e, check: x.check, kind: x.e.type || 'יארצייט', title: x.e.note ? `${x.d.n} – ${x.e.note}` : x.d.n, donors: [{id: x.d.id, d: x.d, rel: ''}]});
+  for (const n of calNotes()) if (!n.every && n.iso === iso) out.push({t: 'note', n, kind: 'הערה', title: n.text, donors: []});
+  for (const {e: n} of evOnDay(ctx.nix, iso)) out.push({t: 'note', n, kind: 'הערה', title: n.text, donors: [], every: true});
+  return out;
+}
+const isReminder = it => it.t !== 'note' || it.n.remind !== false;
+const itemIcon = it => it.t === 'note' ? '📝' : (KIND_ICON[it.kind] || '⭐');
+const phonesOf = d => [d.phone, d.phone2].filter(Boolean);
+function itemHtml(it, opt = {}) {
+  const donors = it.donors.map(({id, d, rel}) => d ? `<span class="ev-d">${donorLink(d.id)}${rel ? ` <small>(${esc(rel)})</small>` : ''}${phonesOf(d).map(ph => ` <a href="tel:${esc(ph.replace(/[^\d+]/g, ''))}">📞 ${esc(ph)}</a>`).join('')}</span>` : '').join('');
+  const head = it.t === 'ev' ? `<a href="#" data-evedit="${it.e.id}"><b>${esc(it.title)}</b></a>` : it.t === 'note' ? `<b>${esc(it.title)}</b>${it.every ? ' <small class="muted">(כל שנה)</small>' : ''}${opt.del ? ` <a href="#" data-ndel="${esc(it.n.id)}" class="muted" title="למחוק את ההערה">✕</a>` : ''}` : `<b>${esc(it.title)}</b>`;
+  return `<div class="ev-row"><div class="ev-main">${itemIcon(it)} ${head} <span class="pill">${esc(it.kind)}</span>${it.e?.level ? ' ' + pill(it.e.level, it.e.level === 'פעיל מאוד' ? 'crit' : it.e.level === 'פעיל' ? 'warn' : '') : ''}${it.check ? ' ' + pill('לברר את המועד השנה', 'info') : ''}${it.e?.note && it.t === 'ev' ? `<small class="muted"> · ${esc(it.e.note.slice(0, 160))}</small>` : ''}</div>${donors ? `<div class="ev-donors">${donors}</div>` : ''}</div>`;
+}
+const hLabel = iso => { const p = hparts(iso); return `${HDAYS[p.day - 1]} ${HM_HE[p.month]}`; };
+
+/* ---------- לוח חודשי ---------- */
+let CAL2_OFF = 0;
+function calMount(box, opt = {}) {
+  const draw = () => {
+    const start = hMonthStart(today(), CAL2_OFF), p0 = hparts(start), days = [], ctx = calCtx();
+    for (let d = start; hparts(d).month === p0.month && days.length < 31; d = addDays(d, 1)) days.push(d);
+    const pad = new Date(start + 'T12:00:00Z').getUTCDay(), t = today();
+    const cell = iso => { const hp = hparts(iso), L = dayItems(iso, ctx), max = opt.compact ? 3 : 5;
+      return `<div class="cal-d${iso === t ? ' today' : ''}${L.length ? ' has' : ''}" data-day="${iso}" title="לחיצה – פרטי היום והוספת הערה"><div class="cal-n"><b>${HDAYS[hp.day - 1]}</b><small>${+iso.slice(8)}/${+iso.slice(5, 7)}</small></div>
+        ${L.slice(0, max).map(it => `<div class="cal-e ${it.t === 'note' ? 'nt' : it.kind === 'יום הולדת' ? 'bd' : ''}">${itemIcon(it)} ${esc(String(it.title).replace(/^(הרה"ח|הרה״ח|מרת|הר"ר)\s+(ר['׳]\s+)?/, '').slice(0, 28))}</div>`).join('')}${L.length > max ? `<div class="cal-more">ועוד ${L.length - max}…</div>` : ''}</div>`; };
+    box.innerHTML = `<div class="card"><div class="hd"><h3>📅 לוח שנה – ${HM_HE[p0.month]} ${p0.year}</h3>
+      <span class="row" style="margin:0;gap:6px"><button class="btn sm" data-c2="-1">◀ חודש קודם</button><button class="btn sm" data-c2="0">היום</button><button class="btn sm" data-c2="1">חודש הבא ▶</button>${opt.compact ? '<a class="btn sm" href="#cal">לוח מלא ←</a>' : ''}</span></div>
+      <div class="bd"><div class="cal">${['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'].map(w => `<div class="cal-h">${w}</div>`).join('')}${'<div></div>'.repeat(pad)}${days.map(cell).join('')}</div>
+      <div class="hint mt">🕯 יארצייט · 🔥 הילולא · 🎂 יום הולדת · ⭐ אחר · 📝 הערה · לחיצה על יום – כל הפרטים והוספת הערה</div></div></div>`;
+  };
+  draw();
+  box.onclick = e => {
+    const b = e.target.closest('[data-c2]'); if (b) { CAL2_OFF = +b.dataset.c2 === 0 ? 0 : CAL2_OFF + +b.dataset.c2; draw(); return; }
+    const d = e.target.closest('[data-day]'); if (d) dayDialog(d.dataset.day, draw);
+  };
+  return draw;
+}
+/* ---------- חלון יום: כל האירועים + הערות ---------- */
+function dayDialog(iso, after) {
+  const m = document.createElement('div'); m.className = 'modal';
+  const render = () => {
+    const L = dayItems(iso);
+    m.innerHTML = `<div class="box form wide" style="max-width:760px"><div class="fmain"><h3>${hLabel(iso)} · ${wday(iso)} ${fdate(iso)}</h3>
+      <div class="day-list">${L.length ? L.map(it => itemHtml(it, {del: true})).join('') : '<div class="empty">אין אירועים ביום הזה</div>'}</div>
+      <div class="card mt" style="padding:12px 14px"><b>📝 הערה חדשה ליום הזה</b>
+        <textarea id="dnText" rows="2" placeholder="מה לזכור ביום הזה…" style="width:100%;margin-top:6px"></textarea>
+        <label style="display:flex;gap:6px;align-items:center;margin-top:6px"><input type="checkbox" id="dnEvery"> כל שנה ב-${hLabel(iso)} (לפי התאריך העברי)</label>
+        <label style="display:flex;gap:6px;align-items:center;margin-top:4px"><input type="checkbox" id="dnRem" checked> להזכיר לי יום לפני</label>
+        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" data-dnadd>הוספת הערה</button><button class="btn" type="button" data-evnew>＋ אירוע (יארצייט / יום הולדת) ביום הזה</button><button class="btn" type="button" data-close>סגירה</button></div></div></div></div>`;
+  };
+  render(); document.body.appendChild(m);
+  const close = () => { m.remove(); after && after(); };
+  m.addEventListener('mousedown', e => { if (e.target === m) close(); });
+  m.onclick = async e => {
+    if (e.target.closest('[data-close]')) return close();
+    const ev = e.target.closest('[data-evedit]'); if (ev) { e.preventDefault(); m.remove(); eventForm(S.events.find(x => String(x.id) === ev.dataset.evedit)); return; }
+    if (e.target.closest('[data-evnew]')) { const p = hparts(iso); m.remove(); eventForm({hday: p.day, hmonth: p.month}); return; }
+    const del = e.target.closest('[data-ndel]');
+    if (del) { e.preventDefault(); try { await prefSet('cal_notes', calNotes().filter(n => String(n.id) !== del.dataset.ndel)); render(); toast('נמחק'); } catch (ex) { toast(ex.message, true); } return; }
+    if (e.target.closest('[data-dnadd]')) {
+      const text = $('#dnText', m).value.trim(); if (!text) return toast('צריך לכתוב את ההערה', true);
+      const p = hparts(iso), every = $('#dnEvery', m).checked;
+      const n = {id: Date.now().toString(36), text, iso: every ? null : iso, every, hday: every ? p.day : null, hmonth: every ? p.month : null, remind: $('#dnRem', m).checked};
+      try { await prefSet('cal_notes', [...calNotes(), n]); render(); toast('ההערה נשמרה ✓'); } catch (ex) { toast(ex.message, true); }
+    }
+  };
+}
+/* ---------- הערות קבועות ---------- */
+function fixedNotesHtml() {
+  const L = fixedNotes();
+  return `<div class="card"><div class="hd"><h3>📌 הערות קבועות</h3><span class="hint">תמיד מופיעות כאן ובלוח הבקרה</span></div><div class="bd">
+    ${L.length ? `<ul class="fx-notes">${L.map(n => `<li><span>${esc(n.text)}</span><a href="#" data-fxndel="${esc(n.id)}" class="muted" title="למחוק">✕</a></li>`).join('')}</ul>` : '<div class="empty" style="padding:6px 0">אין עדיין הערות קבועות</div>'}
+    <div class="row" style="margin-top:8px;gap:6px"><input class="input" id="fxnIn" placeholder="הערה קבועה חדשה…" style="flex:1"><button class="btn primary" data-fxnadd>הוספה</button></div></div></div>`;
+}
+function bindFixedNotes(box, redraw) {
+  box.addEventListener('click', async e => {
+    const d = e.target.closest('[data-fxndel]');
+    if (d) { e.preventDefault(); try { await prefSet('fixed_notes', fixedNotes().filter(n => String(n.id) !== d.dataset.fxndel)); redraw(); } catch (ex) { toast(ex.message, true); } return; }
+    if (e.target.closest('[data-fxnadd]')) { const t = $('#fxnIn', box).value.trim(); if (!t) return;
+      try { await prefSet('fixed_notes', [...fixedNotes(), {id: Date.now().toString(36), text: t}]); redraw(); toast('נשמר ✓'); } catch (ex) { toast(ex.message, true); } }
+  });
+  box.addEventListener('keydown', e => { if (e.target.id === 'fxnIn' && e.key === 'Enter') { e.preventDefault(); box.querySelector('[data-fxnadd]').click(); } });
+}
+/* ---------- היום ומחר ---------- */
+function upcoming(days = 2) {
+  const t = today(), ctx = calCtx(), out = [];
+  for (let i = 0; i < days; i++) { const iso = addDays(t, i); for (const it of dayItems(iso, ctx)) out.push({...it, iso, when: i === 0 ? 'היום' : i === 1 ? 'מחר' : wday(iso)}); }
+  return out;
+}
+function upcomingHtml(L) {
+  const g = groupBy(L, x => x.iso);
+  return [...g.entries()].map(([iso, xs]) => `<div class="ev-day"><div class="ev-dh"><b>${xs[0].when}</b> · ${hLabel(iso)} · ${fdate(iso)}</div>${xs.map(it => itemHtml(it)).join('')}</div>`).join('');
+}
+// תזכורת קופצת – פעם ביום, על מה שיש היום ומחר
+let EVPOP_DONE = '';
+function evPopupOnce() {
+  const t = today(); if (EVPOP_DONE === t) return; EVPOP_DONE = t;
+  try { if (localStorage.getItem('gvia_evpop') === t) return; } catch {}
+  const L = upcoming(2).filter(isReminder); if (!L.length) return;
+  try { localStorage.setItem('gvia_evpop', t); } catch {}
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="box form wide" style="max-width:760px"><div class="fmain"><h3>🔔 תזכורת: ${L.filter(x => x.when === 'מחר').length} אירועים מחר${L.some(x => x.when === 'היום') ? ` · ${L.filter(x => x.when === 'היום').length} היום` : ''}</h3>
+    <div class="day-list">${upcomingHtml(L)}</div><div class="row" style="margin-top:10px"><button class="btn primary" type="button" data-close>הבנתי</button><a class="btn" href="#cal" data-close>ללוח השנה</a></div></div></div>`;
+  document.body.appendChild(m);
+  m.onclick = e => { const ev = e.target.closest('[data-evedit]'); if (ev) { e.preventDefault(); m.remove(); eventForm(S.events.find(x => String(x.id) === ev.dataset.evedit)); return; }
+    if (e.target.closest('[data-close]') || e.target.closest('a[href^="#donor/"]')) m.remove(); };
+  m.addEventListener('mousedown', e => { if (e.target === m) m.remove(); });
+}
+/* ---------- עמוד "לוח שנה" ---------- */
+routes.cal = v => {
+  v.onclick = null; v.onchange = null; v.oninput = null;
+  const L = upcoming(8);
+  v.innerHTML = head('לוח שנה', `${hLabel(today())} · אירועים, יארצייטים, ימי הולדת והערות`, `<div class="page-actions"><button class="btn primary" data-evnew2>＋ אירוע</button><a class="btn" href="#prep">הכנה למגביות ←</a></div>`) +
+    `<div class="cal-page"><div id="calMain"></div><div class="cal-side"><div id="fxBox"></div>
+      <div class="card mt"><div class="hd"><h3>🔔 השבוע הקרוב</h3></div>${L.length ? upcomingHtml(L) : '<div class="allclear" style="padding:14px">אין אירועים בשבוע הקרוב</div>'}</div></div></div>`;
+  const redraw = () => routes.cal(v);
+  calMount($('#calMain', v), {});
+  $('#fxBox', v).innerHTML = fixedNotesHtml(); bindFixedNotes($('#fxBox', v), redraw);
+  v.onclick = e => { if (e.target.closest('[data-evnew2]')) { eventForm({}); return; }
+    const ev = e.target.closest('.cal-side [data-evedit]'); if (ev) { e.preventDefault(); eventForm(S.events.find(x => String(x.id) === ev.dataset.evedit)); } };
+};
+/* ---------- בלוח הבקרה: מחר/היום + הערות קבועות + לוח קטן ---------- */
+function dashTop(box) {
+  const L = upcoming(2).filter(isReminder);
+  box.innerHTML = `<div class="dash-top-grid"><div class="card"><div class="hd"><h3>🔔 מחר והיום</h3><a class="btn sm" href="#cal">לוח שנה ←</a></div>${L.length ? upcomingHtml(L) : '<div class="allclear" style="padding:14px">אין אירועים מחר</div>'}</div>
+    <div id="dashFx"></div></div><div id="dashCalM" class="mt"></div>`;
+  $('#dashFx', box).innerHTML = fixedNotesHtml(); bindFixedNotes($('#dashFx', box), () => dashTop(box));
+  calMount($('#dashCalM', box), {compact: true});
+  box.querySelector('.dash-top-grid').onclick = e => { const ev = e.target.closest('[data-evedit]'); if (ev) { e.preventDefault(); eventForm(S.events.find(x => String(x.id) === ev.dataset.evedit)); } };
 }
 
 </script>
