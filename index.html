@@ -1173,7 +1173,9 @@ function derive() {
     if (x.campaign) d.camps.add(x.campaign);
     if (x.installments >= 999) { d.rec = true; if (!d.recLast || x.d >= d.recLast) { d.recLast = x.d; d.recAmt = +x.amount; } }
   }
-  for (const c of S.commitments) { const d = c.donor_id && donors.get(c.donor_id); if (d && c.state === 'התחייבות') d.openC++; }
+  for (const c of S.commitments) { const d = c.donor_id && donors.get(c.donor_id); if (d && c.state === 'התחייבות') d.openC++;
+    // הוראת קבע בנדרים פלוס (נקלטה מהמייל "הוראת קבע חדשה") – גם היא הו"ק
+    if (d && c.state === 'הו"ק פעיל') { d.rec = true; d.recNd = (d.recNd || 0) + (+c.monthly || 0); if (!d.recAmt) d.recAmt = +c.monthly || 0; } }
   for (const f of S.failed_charges) { const d = f.donor_id && donors.get(f.donor_id); if (d && !f.resolved) d.failedN++; }
   S.calls.sort((a, b) => b.at.localeCompare(a.at));
   for (const c of S.calls) {
@@ -1395,6 +1397,7 @@ function donorStatus(d) {
   if (!d.last) return d.openC ? ['התחייבות בלבד', 'info'] : ['ללא תרומות', ''];
   const gap = daysBetween(d.last, D.lastDate);
   if (d.rec && d.recLast && daysBetween(d.recLast, D.lastDate) <= 45) return ['הו״ק פעיל', 'good'];
+  if (d.recNd && !(d.recLast && daysBetween(d.recLast, D.lastDate) <= 400)) return ['הו״ק פעיל – נדרים פלוס', 'good'];
   if (d.rec && d.recLast && daysBetween(d.recLast, D.lastDate) <= 400) return ['הו״ק נעצר', 'crit'];
   if (gap <= 365) return ['פעיל השנה', 'good'];
   if (gap <= 730) return ['לא תרם השנה', 'warn'];
@@ -4488,7 +4491,7 @@ function wlCompute(f) {
     if (f.maxCnt !== '' && cnt > +f.maxCnt) continue;
     if (f.minYear !== '' && Math.max(0, ...Object.values(d.byYear)) < +f.minYear) continue;
     rows.push({id: d.id, d, name: d.n, father: d.father || '', city: d.city || '', country, address: d.address || '', phone: d.phone || '', phone2: d.phone2 || '',
-      cnt, amt, pCnt, pAmt, byM, last: d.last, lastAmt: d.lastAmt, first: d.first, total: d.total, allCnt: d.cnt, rec: d.rec ? (d.recAmt ? money(d.recAmt) + ' לחודש' : 'כן') : '',
+      cnt, amt, pCnt, pAmt, byM, last: d.last, lastAmt: d.lastAmt, first: d.first, total: d.total, allCnt: d.cnt, rec: d.rec ? (d.recAmt ? money(d.recAmt) + ' לחודש' : 'כן') + (d.recNd ? ' (נדרים פלוס)' : '') : '',
       openC: d.openC, marks: mk, byYear: d.byYear,
       state: !d.cnt ? 'מעולם לא תרם' : !cnt && pCnt ? 'הפסיק' : !cnt ? 'לא תרם בתקופה' : d.first >= R.from ? 'חדש' : pCnt && amt < pAmt ? 'ירד' : pCnt && amt > pAmt ? 'עלה' : 'תרם'});
   }
