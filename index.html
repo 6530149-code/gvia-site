@@ -5651,40 +5651,63 @@ const lkTok = s => String(s || '').replace(/[״"'׳`’]/g, '').replace(/[()\[\]
 // שם הנפטר בלבד: עד "בן/בת/ב"ר/בהרה"ח" או עד תאריך הפטירה
 function lkDeceased(title) {
   let s = String(title || '').replace(/\([^)]*\)/g, ' ');
+  // "פלוני הי״ו - לע״נ אביו ..." – החלק הראשון הוא החי; לוקחים את החלק של הנפטר
+  const parts = s.split(/\s[-–]\s|לע"נ|לע״נ/);
+  if (parts.length > 1) { const dead = parts.find(x => /ז"ל|ז״ל|ע"ה|ע״ה|זצ"ל|זצ״ל|זצוק"ל|נלב"ע|נלב״ע|הי"ד|מרת|האשה/.test(x)); const live = /הי"ו|הי״ו|שליט"א|שליט״א|שיחי/.test(parts[0]);
+    if (live && !dead) return []; if (live || dead) s = dead || parts[1]; }
+  s = s.replace(/^\s*(אביו|אמו|חמיו|חמותו|זקינו|זקינתו|אחיו|אחותו)\s+/, ' ');
   s = s.split(/\s(?:בן|בת|ב"ר|ב״ר|בהרה"ח|בהרה״ח|בהר"ר|בהר״ר|נלב"ע|נלב״ע|לע"נ|לע״נ)\s|\s[-–]\s/)[0];
   return lkTok(s);
 }
 const lkFather = d => lkTok(String(d.father || '').replace(/^(ב"ר|ב״ר|בן הרב|בן|ב\.ר)\s*/, ''));
+const lkFil = d => lkTok(String(d.father_in_law || '').replace(/^(ח"ר|ח״ר|חמיו|חותנו)\s*/, ''));
+// עץ משפחה מכרטיסי התורמים: בן = אותה משפחה ושם האב תואם; חתן = "שם חמיו" תואם (שם פרטי + משפחה)
+function lkTree() {
+  if (LK_TREE && LK_TREE.D === D) return LK_TREE;
+  const byFam = new Map(), filByFam = new Map(), fams = new Set();
+  const famOf = d => lkTok(d.family || String(d.name || '').split(' ')[0])[0];
+  const firstOf = d => lkTok(d.first_name || String(d.name || '').split(' ').slice(1).join(' '));
+  for (const d of D.donorList) { if (d.extra?.anon) continue; const f = famOf(d); if (!f) continue; fams.add(f); d._lf = f; d._lfirst = firstOf(d); d._lfa = lkFather(d); (byFam.get(f) || byFam.set(f, []).get(f)).push(d); }
+  for (const d of D.donorList) { if (!d._lf) continue; const t = lkFil(d); if (t.length < 2) continue; const f = [...t].reverse().find(w => fams.has(w)); if (!f) continue; d._lfil = {f, first: t.filter(w => w !== f)}; (filByFam.get(f) || filByFam.set(f, []).get(f)).push(d); }
+  const match = (tok, first) => tok.length && first.length && tok.every(w => first.includes(w)) && tok.includes(first[0]);
+  // ילדים של אדם (שם פרטי + משפחה): בנים וחתנים
+  const kids = (fam, first, selfId) => {
+    const out = [];
+    for (const d of byFam.get(fam) || []) if (d.id !== selfId && match(d._lfa, first)) out.push({d, rel: 'בן', long: d._lfa.length >= 2 && first.length >= 2 || first.length === 1 && d._lfa.length === 1});
+    for (const d of filByFam.get(fam) || []) if (d.id !== selfId && match(d._lfil.first, first)) out.push({d, rel: 'חתן', long: d._lfil.first.length >= 2 || first.length === 1});
+    return out;
+  };
+  const memo = new Map(), kidsOf = d => memo.get(d.id) || (memo.set(d.id, kids(d._lf, d._lfirst, d.id)), memo.get(d.id));
+  // כמה תורמים עם אותו שם בדיוק – אם יותר מאחד, לא ממשיכים דרכו לדור הבא (לא ברור מי זה)
+  const sameName = new Map(); for (const d of D.donorList) if (d._lf) { const k = d._lf + '|' + d._lfirst.join(' '); sameName.set(k, (sameName.get(k) || 0) + 1); }
+  const unique = d => sameName.get(d._lf + '|' + d._lfirst.join(' ')) === 1;
+  LK_TREE = {D, byFam, fams, kids, kidsOf, unique};
+  return LK_TREE;
+}
+let LK_TREE = null;
 function linkIdeas() {
   const rejected = new Set((S.app_prefs.find(p => p.k === 'link_reject')?.v) || []);
-  const byFam = new Map();
-  for (const d of D.donorList) { if (d.extra?.anon) continue; const f = lkTok(d.family || String(d.name || '').split(' ')[0])[0]; if (!f) continue; if (!byFam.has(f)) byFam.set(f, []); byFam.get(f).push(d); }
-  const firstOf = d => lkTok(d.first_name || String(d.name || '').split(' ').slice(1).join(' '));
-  const out = [];
+  const T = lkTree(), out = [];
   for (const e of S.events || []) {
     if (e.kind === 'הילולא') continue;
     const dec = lkDeceased(e.title); if (dec.length < 2) continue;
     const linked = new Set((e.donor_ids || []).map(Number)), rel = e.relation || {};
-    const sons = new Map();   // id → donor (משויכים כבן + מוצעים)
-    const sug = [];
-    for (const fam of dec) for (const d of byFam.get(fam) || []) {
-      const fa = lkFather(d); if (!fa.length) continue;
-      const decFirst = dec.filter(w => w !== fam);
-      if (!decFirst.length || !fa.every(w => decFirst.includes(w)) || !fa.includes(decFirst[0])) continue;
-      sons.set(d.id, d);
-      if (!linked.has(d.id)) sug.push({d, rel: 'בן', why: `שם המשפחה (${d.family || fam}) ושם האב (${d.father}) מתאימים לנפטר`, sure: fa.length >= 2 || decFirst.length === 1});
-    }
-    for (const id of linked) { const d = D.donors.get(id); if (d && (rel[id] === 'בן' || !rel[id])) sons.set(id, d); }
-    for (const s of sons.values()) {
-      const fam = lkTok(s.family || String(s.name || '').split(' ')[0])[0], sf = firstOf(s); if (!fam || !sf.length) continue;
-      for (const d of byFam.get(fam) || []) {
-        if (d.id === s.id || linked.has(d.id) || sons.has(d.id)) continue;
-        const fa = lkFather(d); if (!fa.length || !fa.every(w => sf.includes(w)) || !fa.includes(sf[0])) continue;
-        sug.push({d, rel: 'נכד', why: `אביו (${s.n}) ${linked.has(s.id) ? 'משויך כבן' : 'מוצע כבן'} של הנפטר`, sure: false});
-      }
-    }
-    const seen = new Set();
-    for (const x of sug) { if (seen.has(x.d.id) || rejected.has(e.id + ':' + x.d.id)) continue; seen.add(x.d.id); out.push({e, ...x}); }
+    let fam = [...dec].reverse().find(w => T.fams.has(w));
+    if (!fam) { const m = String(e.title).match(/^(.*?)\s[-–]\s*(?:לע"נ\s*)?(אביו|זקינו|אביהם|זקינם)/); if (m) { fam = [...lkTok(m[1])].reverse().find(w => T.fams.has(w)); if (fam) dec.push(fam); } }
+    if (!fam) continue;
+    const decFirst = dec.filter(w => w !== fam);
+    const sug = new Map(), add = (d, r, why, sure) => { if (!linked.has(d.id) && !sug.has(d.id)) sug.set(d.id, {d, rel: r, why, sure}); };
+    // דור 1: בנים וחתנים של הנפטר (+ מי שכבר משויך כבן/חתן)
+    const g1 = T.kids(fam, decFirst, null);
+    for (const k of g1) add(k.d, k.rel, k.rel === 'בן' ? `שם המשפחה ושם האב (${k.d.father}) מתאימים לנפטר` : `"שם חמיו" (${k.d.father_in_law}) הוא הנפטר`, k.long);
+    const g1d = new Map(g1.map(k => [k.d.id, k.d]));
+    for (const id of linked) { const d = D.donors.get(id); if (d && d._lf && (!rel[id] || rel[id] === 'בן' || rel[id] === 'חתן')) g1d.set(id, d); }
+    // דור 2: נכדים (ילדים של הבנים ושל החתנים); דור 3: נינים
+    for (const p of g1d.values()) { if (!T.unique(p)) continue;
+      for (const k of T.kidsOf(p)) { add(k.d, 'נכד', `${k.rel === 'בן' ? 'אביו' : 'חמיו'} – ${p.n} – ${linked.has(p.id) ? 'משויך' : 'מוצע'} כ${rel[p.id] || (g1.find(x => x.d.id === p.id)?.rel) || 'בן'} של הנפטר`, false);
+        if (!T.unique(k.d)) continue;
+        for (const k2 of T.kidsOf(k.d)) add(k2.d, 'נין', `${k2.rel === 'בן' ? 'אביו' : 'חמיו'} – ${k.d.n} – נכד של הנפטר (דרך ${p.n})`, false); } }
+    for (const x of sug.values()) if (!rejected.has(e.id + ':' + x.d.id)) out.push({e, ...x});
   }
   return out;
 }
@@ -5705,13 +5728,13 @@ routes.links = v => {
   v.onclick = null; v.onchange = null; v.oninput = null;
   const all = linkIdeas(), L = all.filter(x => !LK_ONLY || x.rel === LK_ONLY), sure = all.filter(x => x.sure);
   const g = groupBy(L, x => x.e.id);
-  v.innerHTML = head('רעיונות לשיוך', 'לפי "שם האב" בכרטיסי התורמים: בנים של הנפטר, ונכדים (בנים של הבנים). מאשרים בלחיצה', `<div class="page-actions">
-      <select data-lkonly><option value="">כל ההצעות (${nf0.format(all.length)})</option><option value="בן"${LK_ONLY === 'בן' ? ' selected' : ''}>בנים (${all.filter(x => x.rel === 'בן').length})</option><option value="נכד"${LK_ONLY === 'נכד' ? ' selected' : ''}>נכדים (${all.filter(x => x.rel === 'נכד').length})</option></select>
+  v.innerHTML = head('רעיונות לשיוך', 'עץ משפחה לפי "שם האב" ו"שם חמיו" בכרטיסי התורמים: בנים וחתנים, נכדים ונינים. מאשרים בלחיצה', `<div class="page-actions">
+      <select data-lkonly><option value="">כל ההצעות (${nf0.format(all.length)})</option><option value="בן"${LK_ONLY === 'בן' ? ' selected' : ''}>בנים (${all.filter(x => x.rel === 'בן').length})</option><option value="חתן"${LK_ONLY === 'חתן' ? ' selected' : ''}>חתנים (${all.filter(x => x.rel === 'חתן').length})</option><option value="נכד"${LK_ONLY === 'נכד' ? ' selected' : ''}>נכדים (${all.filter(x => x.rel === 'נכד').length})</option><option value="נין"${LK_ONLY === 'נין' ? ' selected' : ''}>נינים (${all.filter(x => x.rel === 'נין').length})</option></select>
       <button class="btn primary" data-lksure ${sure.length ? '' : 'disabled'}>✓ לאשר את ${nf0.format(sure.length)} ההצעות הבטוחות</button></div>`) + `
-    <div class="note">"בטוחה" = שם משפחה ושני שמות פרטיים של האב תואמים בדיוק לנפטר. הצעות "נכד" תמיד לבדיקה. ✗ = לא להציע שוב.</div>
+    <div class="note">"בטוחה" = בן או חתן שהשם המלא של הנפטר תואם בדיוק. נכדים ונינים – לבדיקה (ממשיכים רק דרך אדם ששמו יחיד במערכת). ✗ = לא להציע שוב.</div>
     <div class="card mt lk-list">${L.length ? [...g.values()].map(xs => { const e = xs[0].e; return `<div class="ev-dh2"><a href="#" data-evedit="${e.id}">${esc(e.title)}</a> <small class="muted">· ${esc(evDate(e))}${(e.donor_ids || []).length ? ' · כבר משויכים ' + e.donor_ids.length : ' · עוד לא משויך'}</small></div>
       ${xs.map(x => `<div class="lk-r"><span>${donorLink(x.d.id)} <small class="muted">${x.d.id}${x.d.city ? ' · ' + esc(x.d.city) : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></span>
-        <span>${pill(x.rel, x.rel === 'בן' ? 'info' : '')}${x.sure ? ' ' + pill('בטוחה', 'ok') : ''}</span><span class="muted lk-why">${esc(x.why)}</span>
+        <span>${pill(x.rel, x.rel === 'בן' || x.rel === 'חתן' ? 'info' : '')}${x.sure ? ' ' + pill('בטוחה', 'ok') : ''}</span><span class="muted lk-why">${esc(x.why)}</span>
         <span class="acts"><button class="btn sm primary" data-lkok="${e.id}:${x.d.id}">✓ שיוך</button><button class="btn sm" data-lkno="${e.id}:${x.d.id}" title="לא להציע שוב">✗</button></span></div>`).join('')}`; }).join('')
       : '<div class="allclear">אין כרגע הצעות. כשתמלאו "שם האב" בכרטיסי תורמים – יופיעו כאן עוד</div>'}</div>`;
   const find = k => all.find(x => x.e.id + ':' + x.d.id === k);
