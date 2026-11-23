@@ -4894,7 +4894,7 @@ function wlPrint(f) {
    ========================================================= */
 const EV_KINDS = ['יארצייט', 'הילולא', 'יום הולדת', 'אחר'];
 const EV_LEVELS = ['רגיל', 'פעיל', 'פעיל מאוד'];
-const EV_REL = ['בן', 'נכד', 'אח', 'חתן', 'גיס', 'אחיין', 'נין', 'תלמיד', 'משפחה', 'אחר'];
+const EV_REL = ['בן', 'בת', 'נכד', 'נין', 'חתן', 'בעל', 'אח', 'גיס', 'אחיין', 'תלמיד', 'משפחה', 'אחר'];
 const EV = {from: null, to: null, inclCards: true, level: ''};
 // שם חודש עברי בטקסט → שם החודש במערכת
 const HM_TXT = [[/^(מר)?חשו?ון$/, 'Heshvan'], [/^תשרי$/, 'Tishri'], [/^כסלי?ו$/, 'Kislev'], [/^טבת$/, 'Tevet'], [/^שבט$/, 'Shevat'], [/^אדר(א|ראשון)$/, 'Adar I'], [/^אדר(ב|שני)$/, 'Adar II'], [/^אדר$/, 'Adar'],
@@ -5668,6 +5668,8 @@ function lkTree() {
   const famOf = d => lkTok(d.family || String(d.name || '').split(' ')[0])[0];
   const firstOf = d => lkTok(d.first_name || String(d.name || '').split(' ').slice(1).join(' '));
   for (const d of D.donorList) { if (d.extra?.anon) continue; const f = famOf(d); if (!f) continue; fams.add(f); d._lf = f; d._lfirst = firstOf(d); d._lfa = lkFather(d); (byFam.get(f) || byFam.set(f, []).get(f)).push(d); }
+  const wifeByFam = new Map();
+  for (const d of D.donorList) { if (!d._lf) continue; const w = String(d.extra?.wife || ''); if (!w || /[.()]/.test(w)) continue; const t = lkTok(w); if (t.length) { d._lwife = t; (wifeByFam.get(d._lf) || wifeByFam.set(d._lf, []).get(d._lf)).push(d); } }
   for (const d of D.donorList) { if (!d._lf) continue; const t = lkFil(d); if (t.length < 2) continue; const f = [...t].reverse().find(w => fams.has(w)); if (!f) continue; d._lfil = {f, first: t.filter(w => w !== f)}; (filByFam.get(f) || filByFam.set(f, []).get(f)).push(d); }
   const match = (tok, first) => tok.length && first.length && tok.every(w => first.includes(w)) && tok.includes(first[0]);
   // ילדים של אדם (שם פרטי + משפחה): בנים וחתנים
@@ -5681,7 +5683,8 @@ function lkTree() {
   // כמה תורמים עם אותו שם בדיוק – אם יותר מאחד, לא ממשיכים דרכו לדור הבא (לא ברור מי זה)
   const sameName = new Map(); for (const d of D.donorList) if (d._lf) { const k = d._lf + '|' + d._lfirst.join(' '); sameName.set(k, (sameName.get(k) || 0) + 1); }
   const unique = d => sameName.get(d._lf + '|' + d._lfirst.join(' ')) === 1;
-  LK_TREE = {D, byFam, fams, kids, kidsOf, unique};
+  const husbands = (fam, first) => (wifeByFam.get(fam) || []).filter(d => match(d._lwife, first));
+  LK_TREE = {D, byFam, fams, kids, kidsOf, unique, husbands};
   return LK_TREE;
 }
 let LK_TREE = null;
@@ -5697,9 +5700,15 @@ function linkIdeas() {
     if (!fam) continue;
     const decFirst = dec.filter(w => w !== fam);
     const sug = new Map(), add = (d, r, why, sure) => { if (!linked.has(d.id) && !sug.has(d.id)) sug.set(d.id, {d, rel: r, why, sure}); };
-    // דור 1: בנים וחתנים של הנפטר (+ מי שכבר משויך כבן/חתן)
-    const g1 = T.kids(fam, decFirst, null);
-    for (const k of g1) add(k.d, k.rel, k.rel === 'בן' ? `שם המשפחה ושם האב (${k.d.father}) מתאימים לנפטר` : `"שם חמיו" (${k.d.father_in_law}) הוא הנפטר`, k.long);
+    // נפטרת: מחפשים את הבעל (תורם ש"שם אישה" שלו ושם המשפחה תואמים), והילדים שלה = הילדים שלו
+    const female = /^(מרת|האשה|הרבנית|הצדקנית)|\s(מרת|האשה)\s|ע"ה|ע״ה/.test(String(e.title).split(/\s(?:בן|בת|ב"ר|ב״ר)\s/)[0]);
+    let g1 = [];
+    if (female) {
+      const hs = T.husbands(fam, decFirst);
+      for (const h of hs) { add(h, 'בעל', `"שם אישה" (${h.extra.wife}) ושם המשפחה מתאימים לנפטרת`, hs.length === 1);
+        if (hs.length === 1 && T.unique(h)) for (const k of T.kidsOf(h)) g1.push({...k, why: `${k.rel === 'בן' ? 'אביו' : 'חמיו'} – ${h.n} – בעלה של הנפטרת`}); }
+    } else g1 = T.kids(fam, decFirst, null);
+    for (const k of g1) add(k.d, k.rel, k.why || (k.rel === 'בן' ? `שם המשפחה ושם האב (${k.d.father}) מתאימים לנפטר` : `"שם חמיו" (${k.d.father_in_law}) הוא הנפטר`), !female && k.long);
     const g1d = new Map(g1.map(k => [k.d.id, k.d]));
     for (const id of linked) { const d = D.donors.get(id); if (d && d._lf && (!rel[id] || rel[id] === 'בן' || rel[id] === 'חתן')) g1d.set(id, d); }
     // דור 2: נכדים (ילדים של הבנים ושל החתנים); דור 3: נינים
@@ -5729,7 +5738,7 @@ routes.links = v => {
   const all = linkIdeas(), L = all.filter(x => !LK_ONLY || x.rel === LK_ONLY), sure = all.filter(x => x.sure);
   const g = groupBy(L, x => x.e.id);
   v.innerHTML = head('רעיונות לשיוך', 'עץ משפחה לפי "שם האב" ו"שם חמיו" בכרטיסי התורמים: בנים וחתנים, נכדים ונינים. מאשרים בלחיצה', `<div class="page-actions">
-      <select data-lkonly><option value="">כל ההצעות (${nf0.format(all.length)})</option><option value="בן"${LK_ONLY === 'בן' ? ' selected' : ''}>בנים (${all.filter(x => x.rel === 'בן').length})</option><option value="חתן"${LK_ONLY === 'חתן' ? ' selected' : ''}>חתנים (${all.filter(x => x.rel === 'חתן').length})</option><option value="נכד"${LK_ONLY === 'נכד' ? ' selected' : ''}>נכדים (${all.filter(x => x.rel === 'נכד').length})</option><option value="נין"${LK_ONLY === 'נין' ? ' selected' : ''}>נינים (${all.filter(x => x.rel === 'נין').length})</option></select>
+      <select data-lkonly><option value="">כל ההצעות (${nf0.format(all.length)})</option><option value="בן"${LK_ONLY === 'בן' ? ' selected' : ''}>בנים (${all.filter(x => x.rel === 'בן').length})</option><option value="חתן"${LK_ONLY === 'חתן' ? ' selected' : ''}>חתנים (${all.filter(x => x.rel === 'חתן').length})</option><option value="נכד"${LK_ONLY === 'נכד' ? ' selected' : ''}>נכדים (${all.filter(x => x.rel === 'נכד').length})</option><option value="נין"${LK_ONLY === 'נין' ? ' selected' : ''}>נינים (${all.filter(x => x.rel === 'נין').length})</option><option value="בעל"${LK_ONLY === 'בעל' ? ' selected' : ''}>בעל (${all.filter(x => x.rel === 'בעל').length})</option></select>
       <button class="btn primary" data-lksure ${sure.length ? '' : 'disabled'}>✓ לאשר את ${nf0.format(sure.length)} ההצעות הבטוחות</button></div>`) + `
     <div class="note">"בטוחה" = בן או חתן שהשם המלא של הנפטר תואם בדיוק. נכדים ונינים – לבדיקה (ממשיכים רק דרך אדם ששמו יחיד במערכת). ✗ = לא להציע שוב.</div>
     <div class="card mt lk-list">${L.length ? [...g.values()].map(xs => { const e = xs[0].e; return `<div class="ev-dh2"><a href="#" data-evedit="${e.id}">${esc(e.title)}</a> <small class="muted">· ${esc(evDate(e))}${(e.donor_ids || []).length ? ' · כבר משויכים ' + e.donor_ids.length : ' · עוד לא משויך'}</small></div>
