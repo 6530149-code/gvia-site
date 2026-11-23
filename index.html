@@ -5660,7 +5660,7 @@ function lkDeceased(title) {
   return lkTok(s);
 }
 const lkFather = d => lkTok(String(d.father || '').replace(/^(ב"ר|ב״ר|בן הרב|בן|ב\.ר)\s*/, ''));
-const lkFil = d => lkTok(String(d.father_in_law || '').replace(/^(ח"ר|ח״ר|חמיו|חותנו)\s*/, ''));
+const lkFil = d => lkTok(String(d.father_in_law || '').replace(/^\s*(ח"ר|ח״ר|חמיו|חותנו|חתנו של|חתן)\s*(הרב|הרה"ח|הרה״ח|ר'|ר׳)?\s*/, ''));
 // עץ משפחה מכרטיסי התורמים: בן = אותה משפחה ושם האב תואם; חתן = "שם חמיו" תואם (שם פרטי + משפחה)
 function lkTree() {
   if (LK_TREE && LK_TREE.D === D) return LK_TREE;
@@ -5683,8 +5683,9 @@ function lkTree() {
   // כמה תורמים עם אותו שם בדיוק – אם יותר מאחד, לא ממשיכים דרכו לדור הבא (לא ברור מי זה)
   const sameName = new Map(); for (const d of D.donorList) if (d._lf) { const k = d._lf + '|' + d._lfirst.join(' '); sameName.set(k, (sameName.get(k) || 0) + 1); }
   const unique = d => sameName.get(d._lf + '|' + d._lfirst.join(' ')) === 1;
+  const namesakes = d => sameName.get(d._lf + '|' + d._lfirst.join(' ')) || 1;
   const husbands = (fam, first) => (wifeByFam.get(fam) || []).filter(d => match(d._lwife, first));
-  LK_TREE = {D, byFam, fams, kids, kidsOf, unique, husbands};
+  LK_TREE = {D, byFam, fams, kids, kidsOf, unique, namesakes, husbands};
   return LK_TREE;
 }
 let LK_TREE = null;
@@ -5712,8 +5713,11 @@ function linkIdeas() {
     const g1d = new Map(g1.map(k => [k.d.id, k.d]));
     for (const id of linked) { const d = D.donors.get(id); if (d && d._lf && (!rel[id] || rel[id] === 'בן' || rel[id] === 'חתן')) g1d.set(id, d); }
     // דור 2: נכדים (ילדים של הבנים ושל החתנים); דור 3: נינים
-    for (const p of g1d.values()) { if (!T.unique(p)) continue;
-      for (const k of T.kidsOf(p)) { add(k.d, 'נכד', `${k.rel === 'בן' ? 'אביו' : 'חמיו'} – ${p.n} – ${linked.has(p.id) ? 'משויך' : 'מוצע'} כ${rel[p.id] || (g1.find(x => x.d.id === p.id)?.rel) || 'בן'} של הנפטר`, false);
+    for (const p of g1d.values()) { const uq = T.unique(p);
+      for (const k of T.kidsOf(p)) {
+        // לבן שנקרא "ב"ר מנחם" כשיש שני "מנחם שנק" – אי אפשר לדעת של מי הוא; מציעים לבדיקה ולא ממשיכים דרכו
+        if (!uq) { add(k.d, 'נכד', `${k.rel === 'בן' ? 'אביו' : 'חמיו'} – ${p.n} (${p.city || ''}) – ${rel[p.id] || (g1.find(x => x.d.id === p.id)?.rel) || 'בן'} של הנפטר · ⚠ יש ${T.namesakes(p)} בשם "${p.n}" – לבדוק שזה האבא הנכון`, false); continue; }
+        add(k.d, 'נכד', `${k.rel === 'בן' ? 'אביו' : 'חמיו'} – ${p.n} – ${linked.has(p.id) ? 'משויך' : 'מוצע'} כ${rel[p.id] || (g1.find(x => x.d.id === p.id)?.rel) || 'בן'} של הנפטר`, false);
         if (!T.unique(k.d)) continue;
         for (const k2 of T.kidsOf(k.d)) add(k2.d, 'נין', `${k2.rel === 'בן' ? 'אביו' : 'חמיו'} – ${k.d.n} – נכד של הנפטר (דרך ${p.n})`, false); } }
     for (const x of sug.values()) if (!rejected.has(e.id + ':' + x.d.id)) out.push({e, ...x});
