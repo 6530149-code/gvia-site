@@ -696,6 +696,41 @@ nav.tabs a.nav-maint{margin-top:auto;opacity:.8;font-size:13px}
 .tk.sp a{display:flex;flex-direction:column;min-width:0;width:100%}
 .tk.sp .tt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
 .tk.sp small{color:#4a5a70;font-size:11px;white-space:nowrap}
+/* ===== הערות (כמו הערות של גוגל) ===== */
+.nt-quick{padding:12px 14px;max-width:640px;margin:0 auto 16px}
+.nt-quick textarea,.nt-panel textarea{width:100%;box-sizing:border-box;border:1px solid var(--border-2);border-radius:10px;padding:10px;font:inherit;resize:vertical;background:var(--surface);color:inherit}
+.nt-sw{width:24px;height:24px;border-radius:50%;border:1px solid #c9bda8;cursor:pointer;padding:0}
+.nt-sw.on{outline:2px solid var(--accent);outline-offset:2px}
+.nt-h{font-size:13px;color:var(--ink-2);margin:14px 4px 8px;font-weight:600}
+.nt-grid{columns:260px;column-gap:14px}
+.nt-card{break-inside:avoid;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;color:#2a2320}
+.nt-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.nt-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.nt-pin{background:none;border:0;cursor:pointer;opacity:.25;font-size:15px;padding:0}
+.nt-pin.on,.nt-card:hover .nt-pin{opacity:1}
+.nt-body{white-space:pre-wrap;font-size:14px}
+.nt-items{display:flex;flex-direction:column;gap:3px}
+.nt-it{display:flex;gap:8px;align-items:flex-start;font-size:14px;cursor:pointer}
+.nt-it.done span{text-decoration:line-through;color:#8a8077}
+.nt-circle{appearance:none;-webkit-appearance:none;width:17px;height:17px;border:2px solid #8a8077;border-radius:50%;margin:2px 0 0;flex:none;cursor:pointer;position:relative}
+.nt-circle:checked{background:#2f7d4a;border-color:#2f7d4a}
+.nt-circle:checked::after{content:'✓';color:#fff;font-size:11px;position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.nt-done-h{font-size:12px;color:#8a8077;border-top:1px solid rgba(0,0,0,.08);padding-top:4px;margin-top:2px}
+.nt-foot{display:flex;justify-content:space-between;align-items:center;opacity:.55}
+.nt-card:hover .nt-foot{opacity:1}
+.nt-b{background:none;border:0;cursor:pointer;color:var(--accent);font:inherit;font-size:12.5px;padding:2px 6px}
+.nt-fab{position:fixed;left:22px;bottom:78px;z-index:60;width:54px;height:54px;border-radius:50%;border:0;background:#c9a227;color:#3a2a00;font-size:24px;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer}
+.nt-fab:hover{transform:scale(1.05)}
+.nt-panel{position:fixed;left:22px;bottom:142px;z-index:60;width:360px;max-width:calc(100vw - 44px);max-height:75vh;overflow:auto;background:var(--page);border:1px solid var(--border);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.25);padding:12px}
+.nt-ph{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.nt-plist .nt-card{margin-bottom:10px}
+.fxstrip .fx-n{background:#fff;border-radius:8px;padding:3px 10px;color:inherit;text-decoration:none}
+.fx-row{padding:5px 0;border-bottom:1px dashed var(--border);font-size:14px}
+@media print{.nt-fab,.nt-panel{display:none!important}}
+.lk-list{padding:0;overflow:hidden}
+.lk-r{display:grid;grid-template-columns:minmax(0,1.6fr) 130px minmax(0,2fr) auto;gap:10px;align-items:center;padding:8px 16px;border-top:1px solid var(--border);font-size:14px}
+.lk-r .acts{display:flex;gap:6px}
+.lk-why{font-size:12.5px}
 </style>
 </head>
 <body>
@@ -734,7 +769,8 @@ nav.tabs a.nav-maint{margin-top:auto;opacity:.8;font-size:13px}
     <div class="brand"><img src="seal.webp" alt=""><span><span class="t1">בחצרות החיים</span><span class="t2">ניהול תרומות וגביות</span></span></div>
     <nav class="tabs" id="nav">
       <a href="#today" data-r="today"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg><span>לטיפול היום </span><span class="badge hidden" id="todayBadge"></span></a>
-      <a href="#tasks" data-r="cal"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M8 13h2M12 13h2M16 13h0M8 17h2M12 17h2"/></svg><span>יומן</span></a>
+      <a href="#tasks" data-r="cal"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="M8 13h2M12 13h2M16 13h0M8 17h2M12 17h2"/></svg><span>יומן והערות</span></a>
+      <a href="#prep" data-r="yz"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1.5 2.2 2.5 3.6 2.5 5a2.5 2.5 0 0 1-5 0c0-1.4 1-2.8 2.5-5z"/><rect x="9" y="10" width="6" height="11" rx="1"/><path d="M5 21h14"/></svg><span>יארצייטים / ימי הולדת</span></a>
       <a href="#donors" data-r="donors"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></svg><span>תורמים</span></a>
       <a href="#donations" data-r="donations"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.4-9.3-9A5.3 5.3 0 0 1 12 6.2 5.3 5.3 0 0 1 21.3 12C19 16.6 12 21 12 21z"/></svg><span>תרומות</span></a>
       <a href="#finance" data-r="finance"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg><span>כספים</span></a>
@@ -1128,9 +1164,9 @@ function xlsxBlob(fileName, sheets) {
    ========================================================= */
 const CFG_KEY = 'gvia.cfg';
 let sb = null, D = null;
-const S = {donors: [], donations: [], commitments: [], failed_charges: [], calls: [], bank: [], cash: [], invoices: [], nedarim_review: [], campaigns: [], budget_projects: [], budget_items: [], month_close: [], fixed_payments: [], app_prefs: [], private_ledger: [], events: [], tasks: []};
+const S = {donors: [], donations: [], commitments: [], failed_charges: [], calls: [], bank: [], cash: [], invoices: [], nedarim_review: [], campaigns: [], budget_projects: [], budget_items: [], month_close: [], fixed_payments: [], app_prefs: [], private_ledger: [], events: [], tasks: [], notes: []};
 const TABLES = Object.keys(S);
-const OPTIONAL = new Set(['nedarim_review', 'campaigns', 'budget_projects', 'budget_items', 'month_close', 'fixed_payments', 'app_prefs', 'private_ledger', 'events', 'tasks']);   // קיימת רק אחרי עדכון 1
+const OPTIONAL = new Set(['nedarim_review', 'campaigns', 'budget_projects', 'budget_items', 'month_close', 'fixed_payments', 'app_prefs', 'private_ledger', 'events', 'tasks', 'notes']);   // קיימת רק אחרי עדכון 1
 let NEDARIM_READY = false;
 
 const getCfg = () => { if (window.GVIA_CONFIG?.url && window.GVIA_CONFIG?.key) return window.GVIA_CONFIG; try { return JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); } catch { return null; } };
@@ -1292,6 +1328,7 @@ function refresh(keep = true) {
   $('#footInfo').textContent = `${nf0.format(D.donorList.length)} תורמים · ${nf0.format(D.donations.length)} תרומות · תרומה אחרונה ${fdate(D.lastDate)}`;
   route(keep);
   try { evPopupOnce(); } catch (ex) { console.warn(ex); }
+  try { notesFab(); } catch (ex) { console.warn(ex); }
 }
 
 /* רשימות "לטיפול היום" – מחושבות אוטומטית */
@@ -3207,8 +3244,6 @@ routes.calls = v => {
   v.onclick = null;
   v.innerHTML = head('שיחות ותזכורות', 'כל שיחה מתועדת; תאריך "להתקשר שוב" נכנס אוטומטית ל"לטיפול היום"', addBtn('call', '📞 תיעוד שיחה')) + '<div id="t1"></div><div class="mt" id="t2"></div>';
   v.insertAdjacentHTML('afterbegin', '');
-  const calBox = document.createElement('div'); calBox.id = 'calBox'; calBox.className = 'mt'; $('#t1').before(calBox);
-  calMount(calBox, {compact: true});
   const open = S.calls.filter(c => !c.done && c.next_date).sort((a, b) => a.next_date.localeCompare(b.next_date));
   DataTable($('#t1'), {id: 'rem', title: 'תזכורות פתוחות', rows: open, sort: 'next_date', dir: 1, exportName: 'תזכורות', onRow: callForm, cols: callCols()});
   $('#t2').insertAdjacentHTML('afterend', '<div class="mt" id="t3"></div>');
@@ -4960,7 +4995,7 @@ routes.prep = v => {
   const monOpts = HMONTHS.map(([e, h]) => `<option value="${e}">${h}</option>`).join(''), dayOpts = HDAYS.map((h, i) => `<option value="${i + 1}">${h}</option>`).join('');
   const pick = k => `<span style="display:flex;gap:6px"><select data-evd="${k}">${dayOpts}</select><select data-evm="${k}">${monOpts}</select></span>`;
   const unlinked = S.events.filter(e => !(e.donor_ids || []).length);
-  v.innerHTML = head('יומן – יארצייטים ואירועים', `היום ${HDAYS[tp.day - 1]} ${HM_HE[tp.month]} ${tp.year}`, `<div class="page-actions"><button class="btn" data-evx>📊 אקסל</button><button class="btn" data-evprint>🖨 הדפסה</button><label class="btn" style="cursor:pointer">📥 ייבוא מקובץ<input type="file" data-evfile accept=".xlsx,.csv" hidden></label><button class="btn primary" data-evnew>+ יארצייט / אירוע</button></div>`) + `
+  v.innerHTML = head('יארצייטים וימי הולדת', `היום ${HDAYS[tp.day - 1]} ${HM_HE[tp.month]} ${tp.year}`, `<div class="page-actions"><button class="btn" data-evx>📊 אקסל</button><button class="btn" data-evprint>🖨 הדפסה</button><label class="btn" style="cursor:pointer">📥 ייבוא מקובץ<input type="file" data-evfile accept=".xlsx,.csv" hidden></label><button class="btn primary" data-evnew>+ יארצייט / אירוע</button></div>`) + `
     <div class="card wl-card">
       <div class="wl-row" style="align-items:center;margin-bottom:8px">
         <span class="muted">טווח:</span><button class="btn sm" data-evq="7">השבוע</button><button class="btn sm" data-evq="14">שבועיים</button><button class="btn sm" data-evq="month">החודש העברי</button><button class="btn sm" data-evq="next">החודש הבא</button>
@@ -5232,12 +5267,12 @@ function evPopupOnce() {
 routes.cal = v => {
   v.onclick = null; v.onchange = null; v.oninput = null;
   const L = upcoming(8);
-  v.innerHTML = head('לוח שנה', `${hLabel(today())} · אירועים, יארצייטים, ימי הולדת והערות`, `<div class="page-actions"><button class="btn primary" data-evnew2>＋ אירוע</button><a class="btn" href="#prep">הכנה למגביות ←</a></div>`) +
+  v.innerHTML = head('לוח חודשי עברי', `${hLabel(today())} · יארצייטים, ימי הולדת והערות לתאריך`, `<div class="page-actions"><button class="btn primary" data-evnew2>+ יארצייט / אירוע</button><a class="btn" href="#prep">לרשימה ←</a></div>`) +
     `<div class="cal-page"><div id="calMain"></div><div class="cal-side"><div id="fxBox"></div>
       <div class="card mt"><div class="hd"><h3>🔔 השבוע הקרוב</h3></div>${L.length ? upcomingHtml(L) : '<div class="allclear" style="padding:14px">אין אירועים בשבוע הקרוב</div>'}</div></div></div>`;
   const redraw = () => routes.cal(v);
   calMount($('#calMain', v), {});
-  $('#fxBox', v).innerHTML = fixedNotesHtml(); bindFixedNotes($('#fxBox', v), redraw);
+  $('#fxBox', v).innerHTML = `<div class="card"><div class="hd"><h3>📌 הערות נעוצות</h3><a class="btn sm" href="#notes">כל ההערות ←</a></div><div class="bd">${pinnedNotes().map(n => `<div class="fx-row">${esc(n.title || String(n.body || '').split('\n')[0] || (n.items || []).map(i => i.text).join(', ')).slice(0, 80)}</div>`).join('') || '<div class="muted">אין</div>'}</div></div>`;
   v.onclick = e => { if (e.target.closest('[data-evnew2]')) { eventForm({}); return; }
     const ev = e.target.closest('.cal-side [data-evedit]'); if (ev) { e.preventDefault(); eventForm(S.events.find(x => String(x.id) === ev.dataset.evedit)); } };
 };
@@ -5256,7 +5291,8 @@ function dashTop(box) {
    ========================================================= */
 const GROUPS = [
   {k: 'today', tabs: [['today', 'לטיפול היום']]},
-  {k: 'cal', tabs: [['tasks', 'משימות'], ['prep', 'יארצייטים ואירועים'], ['cal', 'לוח חודשי והערות']]},
+  {k: 'cal', tabs: [['tasks', 'יומן'], ['notes', 'הערות']]},
+  {k: 'yz', tabs: [['prep', 'יארצייטים וימי הולדת'], ['links', 'רעיונות לשיוך'], ['cal', 'לוח חודשי עברי']]},
   {k: 'donors', tabs: [['donors', 'רשימת תורמים'], ['trip', 'רשימת עבודה'], ['calls', 'שיחות']], also: ['donor']},
   {k: 'donations', tabs: [['donations', 'תרומות'], ['commits', 'התחייבויות'], ['campaigns', 'מגביות'], ['nedarim', 'נדרים פלוס']]},
   {k: 'finance', tabs: [['finance', 'כספים'], ['budgets', 'תקציבים']]},
@@ -5356,7 +5392,7 @@ routes.tasks = v => {
   const wk = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'שבת'];
   const title = TASK_VIEW === 'week' ? `${hLabel(days[0])} – ${hLabel(days[6])} · ${fdate(days[0])} – ${fdate(days[6])}` : `${wday(days[0])} ${hLabel(days[0])} · ${fdate(days[0])}`;
   const und = S.tasks.filter(x => !x.d), rep = S.tasks.filter(x => x.repeat);
-  v.innerHTML = head('יומן – משימות', title, `<div class="page-actions">
+  v.innerHTML = head('יומן', title, `<div class="page-actions">
       <button class="btn" data-tnav="-1">→ הקודם</button><button class="btn" data-tnav="0">היום</button><button class="btn" data-tnav="1">הבא ←</button>
       <span class="seg"><button class="btn ${TASK_VIEW === 'day' ? 'on' : ''}" data-tview="day">יום</button><button class="btn ${TASK_VIEW === 'week' ? 'on' : ''}" data-tview="week">שבוע</button><a class="btn" href="#cal">חודש</a></span>
       <button class="btn primary" data-newtask>+ משימה</button></div>`) + `
@@ -5429,14 +5465,14 @@ routes.today = v => {
   if (!TODAY_SEL || !TILES.find(x => x.k === TODAY_SEL)) TODAY_SEL = (TILES.find(x => x.n && !x.soft) || TILES[0]).k;
   const sel = TILES.find(x => x.k === TODAY_SEL);
   const cls = x => !x.n ? (x.ok ? 'tile ok' : 'tile zero') : x.crit ? 'tile crit' : x.soft ? 'tile soft' : 'tile warn';
-  const fx = fixedNotes();
+  const fx = pinnedNotes();
   const lim = EXPANDED.has('t_' + sel.k) ? 1e9 : 40;
   const listHtml = sel.html ? `<div class="tl-body">${sel.html()}</div>` : `
     ${sel.rows.length || sel.extra ? `<div class="tl"><div class="th"><span>${sel.head[0]}</span><span>${sel.head[1]}</span><span>${sel.head[2]}</span><span></span></div>${sel.extra || ''}${sel.rows.slice(0, lim).map(sel.row).join('')}</div>
       ${sel.rows.length > lim ? `<a href="#" class="more" data-expand="t_${sel.k}">הצג את כל ה-${nf0.format(sel.rows.length)} ↓</a>` : ''}` : `<div class="allclear">✓ אין כאן כלום – הכל טופל</div>`}`;
   v.innerHTML = head('לטיפול היום', `${new Intl.DateTimeFormat('he-IL', {weekday: 'long', timeZone: 'UTC'}).format(new Date(t + 'T12:00:00Z'))}, ${hLabel(t)} · ${fdate(t)}`,
       `<div class="page-actions"><button class="btn primary" data-newtask>+ משימה</button>${addBtn('call', '+ תיעוד שיחה')}${addBtn('donation', '+ תרומה')}</div>`) + `
-    <div class="fxstrip"><b>הערות קבועות:</b>${fx.map(n => `<span>${esc(n.text)}</span>`).join('') || '<span class="muted" style="background:none">אין</span>'}<a href="#cal" class="muted" style="margin-inline-start:auto">+ הוספה / עריכה</a></div>
+    <div class="fxstrip"><b>📌 הערות נעוצות:</b>${fx.map(n => `<a href="#notes" class="fx-n">${esc(n.title || String(n.body || '').split('\n')[0] || (n.items || []).map(i => i.text).slice(0, 2).join(', ')).slice(0, 70)}${(n.items || []).length ? ` <small>(${(n.items || []).filter(i => !i.done).length} לסימון)</small>` : ''}</a>`).join('') || '<span class="muted" style="background:none">אין – נועצים הערה ב-📌</span>'}<a href="#notes" class="muted" style="margin-inline-start:auto">כל ההערות ←</a></div>
     <div class="tiles">${TILES.map(x => `<button type="button" class="${cls(x)}${x.k === TODAY_SEL ? ' sel' : ''}" data-tile="${x.k}"><span class="tn">${x.show || nf0.format(x.n)}</span><span class="tl1">${esc(x.label)}</span><span class="tl2">${esc(x.sub || '')}</span></button>`).join('')}</div>
     <div class="today-main">
       <section class="card tlist"><div class="hd"><h3>${esc(sel.label)} · ${sel.show || nf0.format(sel.k === 'spec' ? ev.length : sel.n)}</h3><span class="hint">לחיצה על קובייה אחרת מחליפה את הרשימה</span></div>${listHtml}</section>
@@ -5500,6 +5536,189 @@ routes.dash = v => {
         <table class="rep-t"><tbody>${topL.map(([id, a, n], i) => `<tr><td>${i + 1}. ${donorLink(+id)}</td><td class="n muted">${n} תרומות</td><td class="n"><b>${money(a)}</b></td></tr>`).join('') || '<tr><td>אין תרומות</td></tr>'}</tbody></table></div>
     </div>`;
   $('#dy').onchange = e => { store.set('dashYear', e.target.value); routes.dash(v); };
+};
+
+/* =========================================================
+   הערות בסגנון "הערות של גוגל": כרטיסים עם טקסט או רשימת סימון ◯,
+   נעיצה (מופיע ב"לטיפול היום"), צבע, ארכיון. + כפתור הערות צף בכל האתר
+   ========================================================= */
+const NOTE_COLORS = [['', 'לבן'], ['#fff4c2', 'צהוב'], ['#e3f0d8', 'ירוק'], ['#dfeaf7', 'כחול'], ['#fde2e1', 'ורוד'], ['#efe6f6', 'סגול']];
+let NOTES_ARCH = false;
+const notesList = () => (S.notes || []).filter(n => !!n.archived === NOTES_ARCH).sort((a, b) => (b.pinned - a.pinned) || String(b.updated_at).localeCompare(String(a.updated_at)));
+const pinnedNotes = () => (S.notes || []).filter(n => n.pinned && !n.archived);
+async function saveNote(n, patch) {
+  const row = {...patch, updated_at: new Date().toISOString()};
+  try { applyRows('notes', n && n.id ? await api.update('notes', n.id, row) : await api.insert('notes', [row])); }
+  catch (ex) { toast(/notes|schema cache/i.test(ex.message) ? 'צריך להריץ קודם את עדכון 26' : ex.message, true); }
+}
+function noteCardHtml(n) {
+  const items = n.items || [], open = items.filter(i => !i.done), done = items.filter(i => i.done);
+  const it = (x, i) => `<label class="nt-it${x.done ? ' done' : ''}"><input type="checkbox" class="nt-circle" data-ntcheck="${n.id}:${items.indexOf(x)}"${x.done ? ' checked' : ''}><span>${esc(x.text)}</span></label>`;
+  return `<div class="nt-card" style="${n.color ? 'background:' + esc(n.color) : ''}" data-note="${n.id}">
+    <div class="nt-top">${n.title ? `<b>${esc(n.title)}</b>` : '<span></span>'}<button class="nt-pin${n.pinned ? ' on' : ''}" data-ntpin="${n.id}" title="${n.pinned ? 'לבטל נעיצה' : 'לנעוץ – יופיע ב"לטיפול היום"'}" aria-label="נעיצה">📌</button></div>
+    ${n.body ? `<div class="nt-body">${esc(n.body)}</div>` : ''}
+    ${items.length ? `<div class="nt-items">${open.map(it).join('')}${done.length ? `<div class="nt-done-h">${done.length} סומנו</div>${done.map(it).join('')}` : ''}</div>` : ''}
+    <div class="nt-foot"><small class="muted">${fdate(String(n.updated_at || '').slice(0, 10))}</small>
+      <span><button class="nt-b" data-ntedit="${n.id}">עריכה</button><button class="nt-b" data-ntarch="${n.id}">${n.archived ? 'החזרה' : 'לארכיון'}</button></span></div></div>`;
+}
+// עורך הערה: כותרת, טקסט, ושורות לסימון (כל שורה שמתחילה ב-"-" או "[]" הופכת לעיגול לסימון)
+function noteEditor(n = {}, after) {
+  const isNew = !n.id;
+  const itemsTxt = (n.items || []).map(i => (i.done ? '[x] ' : '[ ] ') + i.text).join('\n');
+  openForm({title: isNew ? 'הערה חדשה' : 'עריכת הערה', sub: 'לרשימה עם עיגולים לסימון – כותבים כל פריט בשורה בשדה "רשימה לסימון"',
+    values: {title: n.title || '', body: n.body || '', items: itemsTxt, color: (NOTE_COLORS.find(c => c[0] === (n.color || '')) || NOTE_COLORS[0])[1], pinned: !!n.pinned},
+    fields: [{k: 'title', label: 'כותרת (לא חובה)', full: true}, {k: 'body', label: 'טקסט', t: 'textarea'}, {k: 'items', label: 'רשימה לסימון ◯ (פריט בכל שורה)', t: 'textarea'},
+      {k: 'color', label: 'צבע', t: 'list', opts: NOTE_COLORS.map(c => c[1])}, {k: 'pinned', label: 'נעוץ', t: 'check', text: 'להציג בפס ההערות ב"לטיפול היום"'}],
+    onSubmit: async v => {
+      const items = String(v.items || '').split('\n').map(s => s.trim()).filter(Boolean).map(s => ({done: /^\[x\]/i.test(s), text: s.replace(/^\[[ x]?\]\s*/i, '').replace(/^[-•]\s*/, '')}));
+      if (!v.title && !v.body && !items.length) throw new Error('ההערה ריקה');
+      await saveNote(n, {title: v.title || null, body: v.body || null, items, color: (NOTE_COLORS.find(c => c[1] === v.color) || NOTE_COLORS[0])[0] || null, pinned: !!v.pinned});
+      return after;
+    },
+    onDelete: isNew ? null : async () => { await api.remove('notes', n.id); applyRows('notes', [n], true); after && after(); }});
+}
+async function notesClick(e, redraw) {
+  const ck = e.target.closest('[data-ntcheck]');
+  if (ck) { const [id, i] = ck.dataset.ntcheck.split(':'); const n = S.notes.find(x => String(x.id) === id); if (!n) return true;
+    const items = (n.items || []).map((x, j) => j === +i ? {...x, done: ck.checked} : x); await saveNote(n, {items}); redraw && redraw(); return true; }
+  const pin = e.target.closest('[data-ntpin]'); if (pin) { const n = S.notes.find(x => String(x.id) === pin.dataset.ntpin); await saveNote(n, {pinned: !n.pinned}); redraw && redraw(); return true; }
+  const ar = e.target.closest('[data-ntarch]'); if (ar) { const n = S.notes.find(x => String(x.id) === ar.dataset.ntarch); await saveNote(n, {archived: !n.archived}); redraw && redraw(); return true; }
+  const ed = e.target.closest('[data-ntedit]'); if (ed) { noteEditor(S.notes.find(x => String(x.id) === ed.dataset.ntedit), redraw); return true; }
+  return false;
+}
+// הוספה מהירה: שורה אחת → הערה. מתחיל ב-"- " או כמה שורות עם "-" → רשימה לסימון
+async function quickNote(txt, color) {
+  const lines = String(txt || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) return;
+  const isList = lines.length > 1 && lines.slice(1).every(l => /^[-•]/.test(l)) || lines.every(l => /^[-•]/.test(l));
+  if (isList) { const title = /^[-•]/.test(lines[0]) ? null : lines[0]; const items = lines.filter(l => /^[-•]/.test(l)).map(l => ({text: l.replace(/^[-•]\s*/, ''), done: false}));
+    await saveNote(null, {title, body: null, items, color: color || null, pinned: false}); }
+  else await saveNote(null, {title: null, body: lines.join('\n'), items: [], color: color || null, pinned: false});
+}
+routes.notes = v => {
+  v.onclick = null; v.onchange = null; v.oninput = null;
+  if (!Array.isArray(S.notes)) S.notes = [];
+  const L = notesList(), pin = L.filter(n => n.pinned), rest = L.filter(n => !n.pinned);
+  v.innerHTML = head('יומן – הערות', 'כמו "הערות של גוגל": טקסט או רשימה עם עיגולים לסימון · 📌 נעוץ = מופיע גם ב"לטיפול היום"',
+      `<div class="page-actions"><button class="btn ${NOTES_ARCH ? 'primary' : ''}" data-ntarchview>${NOTES_ARCH ? '← חזרה להערות' : '🗄 ארכיון'}</button><button class="btn primary" data-ntnew>+ הערה מלאה</button></div>`) + `
+    ${NOTES_ARCH ? '' : `<div class="card nt-quick"><textarea id="ntQuick" rows="2" placeholder="רשמו הערה… (לרשימה עם עיגולים: כל פריט בשורה חדשה שמתחילה ב- )"></textarea>
+      <div class="row" style="margin:6px 0 0;gap:6px;align-items:center">${NOTE_COLORS.map(c => `<button class="nt-sw${c[0] === '' ? ' on' : ''}" data-ntsw="${c[0]}" style="background:${c[0] || '#fff'}" title="${c[1]}" aria-label="${c[1]}"></button>`).join('')}<span style="flex:1"></span><button class="btn primary" data-ntadd>הוספה</button></div></div>`}
+    ${pin.length ? `<h3 class="nt-h">📌 נעוצות</h3><div class="nt-grid">${pin.map(noteCardHtml).join('')}</div>` : ''}
+    ${rest.length ? `${pin.length ? '<h3 class="nt-h">אחרות</h3>' : ''}<div class="nt-grid">${rest.map(noteCardHtml).join('')}</div>` : (pin.length ? '' : `<div class="allclear mt">${NOTES_ARCH ? 'הארכיון ריק' : 'אין עדיין הערות'}</div>`)}`;
+  let color = '';
+  v.onclick = async e => {
+    if (await notesClick(e, () => routes.notes(v))) return;
+    const sw = e.target.closest('[data-ntsw]'); if (sw) { color = sw.dataset.ntsw; v.querySelectorAll('[data-ntsw]').forEach(b => b.classList.toggle('on', b === sw)); return; }
+    if (e.target.closest('[data-ntadd]')) { const t = $('#ntQuick', v).value; if (!t.trim()) return; await quickNote(t, color); routes.notes(v); return; }
+    if (e.target.closest('[data-ntnew]')) { noteEditor({}, () => routes.notes(v)); return; }
+    if (e.target.closest('[data-ntarchview]')) { NOTES_ARCH = !NOTES_ARCH; routes.notes(v); }
+  };
+  $('#ntQuick', v)?.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) v.querySelector('[data-ntadd]').click(); });
+};
+/* ---------- כפתור הערות צף – בכל עמוד ---------- */
+function notesFab() {
+  if (document.getElementById('ntFab')) return;
+  const b = document.createElement('button'); b.id = 'ntFab'; b.className = 'nt-fab'; b.type = 'button'; b.title = 'הערות'; b.setAttribute('aria-label', 'הערות'); b.textContent = '📝';
+  const panel = document.createElement('div'); panel.id = 'ntPanel'; panel.className = 'nt-panel hidden';
+  document.body.append(b, panel);
+  const draw = () => {
+    const L = notesList().slice(0, 30);
+    panel.innerHTML = `<div class="nt-ph"><b>📝 הערות</b><span><a href="#notes" data-ntall>כל ההערות ←</a> <button class="nt-b" data-ntclose aria-label="סגירה">✕</button></span></div>
+      <textarea id="ntFabIn" rows="3" placeholder="רשמו הערה… (פריטים בשורות עם - = רשימה לסימון)"></textarea>
+      <div class="row" style="margin:6px 0 10px;justify-content:flex-end"><button class="btn primary sm" data-ntfabadd>הוספה</button></div>
+      <div class="nt-plist">${L.map(noteCardHtml).join('') || '<div class="muted">אין הערות</div>'}</div>`;
+    setTimeout(() => $('#ntFabIn', panel)?.focus(), 30);
+  };
+  b.onclick = () => { panel.classList.toggle('hidden'); if (!panel.classList.contains('hidden')) draw(); };
+  panel.onclick = async e => {
+    if (e.target.closest('[data-ntclose]') || e.target.closest('[data-ntall]')) { panel.classList.add('hidden'); return; }
+    if (await notesClick(e, draw)) return;
+    if (e.target.closest('[data-ntfabadd]')) { const t = $('#ntFabIn', panel).value; if (!t.trim()) return; await quickNote(t); toast('ההערה נשמרה ✓'); draw(); if (location.hash.startsWith('#notes')) route(true); }
+  };
+  panel.addEventListener('keydown', e => { if (e.target.id === 'ntFabIn' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) panel.querySelector('[data-ntfabadd]').click(); });
+}
+
+/* =========================================================
+   רעיונות לשיוך: יארצייט ← בני משפחה, לפי "שם האב" שבכרטיסי התורמים.
+   בן = שם המשפחה של התורם ושם אביו מתאימים לנפטר.
+   נכד = אביו של התורם הוא בן של הנפטר (משויך או מוצע), באותה משפחה.
+   ========================================================= */
+const LK_FIN = {'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ'};
+const LK_STOP = new Set(['הרהח', 'הרהג', 'הרהצ', 'הרהק', 'הגהצ', 'הגהק', 'הרב', 'הרר', 'רבי', 'ר', 'מוהר', 'מרת', 'האשה', 'החשובה', 'הבחור', 'הנערה', 'זל', 'זצל', 'זצוקל', 'עה', 'זיע', 'הי', 'היו', 'הייד', 'נלבע', 'יבלחטא', 'שליטא', 'רבנית', 'הרבנית', 'אבדק', 'כק', 'מרן', 'גב', 'לענ', 'משפחת', 'אדמור', 'האדמור']);
+const lkTok = s => String(s || '').replace(/[״"'׳`’]/g, '').replace(/[()\[\],.;:\-–\/|]/g, ' ').split(/\s+/).filter(Boolean).map(w => [...w].map(c => LK_FIN[c] || c).join('')).filter(w => w.length >= 2 && !LK_STOP.has(w));
+// שם הנפטר בלבד: עד "בן/בת/ב"ר/בהרה"ח" או עד תאריך הפטירה
+function lkDeceased(title) {
+  let s = String(title || '').replace(/\([^)]*\)/g, ' ');
+  s = s.split(/\s(?:בן|בת|ב"ר|ב״ר|בהרה"ח|בהרה״ח|בהר"ר|בהר״ר|נלב"ע|נלב״ע|לע"נ|לע״נ)\s|\s[-–]\s/)[0];
+  return lkTok(s);
+}
+const lkFather = d => lkTok(String(d.father || '').replace(/^(ב"ר|ב״ר|בן הרב|בן|ב\.ר)\s*/, ''));
+function linkIdeas() {
+  const rejected = new Set((S.app_prefs.find(p => p.k === 'link_reject')?.v) || []);
+  const byFam = new Map();
+  for (const d of D.donorList) { if (d.extra?.anon) continue; const f = lkTok(d.family || String(d.name || '').split(' ')[0])[0]; if (!f) continue; if (!byFam.has(f)) byFam.set(f, []); byFam.get(f).push(d); }
+  const firstOf = d => lkTok(d.first_name || String(d.name || '').split(' ').slice(1).join(' '));
+  const out = [];
+  for (const e of S.events || []) {
+    if (e.kind === 'הילולא') continue;
+    const dec = lkDeceased(e.title); if (dec.length < 2) continue;
+    const linked = new Set((e.donor_ids || []).map(Number)), rel = e.relation || {};
+    const sons = new Map();   // id → donor (משויכים כבן + מוצעים)
+    const sug = [];
+    for (const fam of dec) for (const d of byFam.get(fam) || []) {
+      const fa = lkFather(d); if (!fa.length) continue;
+      const decFirst = dec.filter(w => w !== fam);
+      if (!decFirst.length || !fa.every(w => decFirst.includes(w)) || !fa.includes(decFirst[0])) continue;
+      sons.set(d.id, d);
+      if (!linked.has(d.id)) sug.push({d, rel: 'בן', why: `שם המשפחה (${d.family || fam}) ושם האב (${d.father}) מתאימים לנפטר`, sure: fa.length >= 2 || decFirst.length === 1});
+    }
+    for (const id of linked) { const d = D.donors.get(id); if (d && (rel[id] === 'בן' || !rel[id])) sons.set(id, d); }
+    for (const s of sons.values()) {
+      const fam = lkTok(s.family || String(s.name || '').split(' ')[0])[0], sf = firstOf(s); if (!fam || !sf.length) continue;
+      for (const d of byFam.get(fam) || []) {
+        if (d.id === s.id || linked.has(d.id) || sons.has(d.id)) continue;
+        const fa = lkFather(d); if (!fa.length || !fa.every(w => sf.includes(w)) || !fa.includes(sf[0])) continue;
+        sug.push({d, rel: 'נכד', why: `אביו (${s.n}) ${linked.has(s.id) ? 'משויך כבן' : 'מוצע כבן'} של הנפטר`, sure: false});
+      }
+    }
+    const seen = new Set();
+    for (const x of sug) { if (seen.has(x.d.id) || rejected.has(e.id + ':' + x.d.id)) continue; seen.add(x.d.id); out.push({e, ...x}); }
+  }
+  return out;
+}
+async function lkAccept(list) {
+  const byE = groupBy(list, x => x.e.id);
+  for (const [, xs] of byE) {
+    const e = xs[0].e, ids = [...(e.donor_ids || []).map(Number)], rel = {...(e.relation || {})};
+    for (const x of xs) { if (!ids.includes(x.d.id)) ids.push(x.d.id); rel[x.d.id] = x.rel; }
+    applyRows('events', await api.update('events', e.id, {donor_ids: ids, relation: rel, updated_at: new Date().toISOString()}));
+  }
+}
+async function lkReject(x) {
+  const cur = (S.app_prefs.find(p => p.k === 'link_reject')?.v) || [];
+  await q(sb.from('app_prefs').upsert([{k: 'link_reject', v: [...cur, x.e.id + ':' + x.d.id]}], {onConflict: 'k'})); await reload('app_prefs');
+}
+let LK_ONLY = '';
+routes.links = v => {
+  v.onclick = null; v.onchange = null; v.oninput = null;
+  const all = linkIdeas(), L = all.filter(x => !LK_ONLY || x.rel === LK_ONLY), sure = all.filter(x => x.sure);
+  const g = groupBy(L, x => x.e.id);
+  v.innerHTML = head('רעיונות לשיוך', 'לפי "שם האב" בכרטיסי התורמים: בנים של הנפטר, ונכדים (בנים של הבנים). מאשרים בלחיצה', `<div class="page-actions">
+      <select data-lkonly><option value="">כל ההצעות (${nf0.format(all.length)})</option><option value="בן"${LK_ONLY === 'בן' ? ' selected' : ''}>בנים (${all.filter(x => x.rel === 'בן').length})</option><option value="נכד"${LK_ONLY === 'נכד' ? ' selected' : ''}>נכדים (${all.filter(x => x.rel === 'נכד').length})</option></select>
+      <button class="btn primary" data-lksure ${sure.length ? '' : 'disabled'}>✓ לאשר את ${nf0.format(sure.length)} ההצעות הבטוחות</button></div>`) + `
+    <div class="note">"בטוחה" = שם משפחה ושני שמות פרטיים של האב תואמים בדיוק לנפטר. הצעות "נכד" תמיד לבדיקה. ✗ = לא להציע שוב.</div>
+    <div class="card mt lk-list">${L.length ? [...g.values()].map(xs => { const e = xs[0].e; return `<div class="ev-dh2"><a href="#" data-evedit="${e.id}">${esc(e.title)}</a> <small class="muted">· ${esc(evDate(e))}${(e.donor_ids || []).length ? ' · כבר משויכים ' + e.donor_ids.length : ' · עוד לא משויך'}</small></div>
+      ${xs.map(x => `<div class="lk-r"><span>${donorLink(x.d.id)} <small class="muted">${x.d.id}${x.d.city ? ' · ' + esc(x.d.city) : ''}${x.d.phone ? ' · ' + esc(x.d.phone) : ''}</small></span>
+        <span>${pill(x.rel, x.rel === 'בן' ? 'info' : '')}${x.sure ? ' ' + pill('בטוחה', 'ok') : ''}</span><span class="muted lk-why">${esc(x.why)}</span>
+        <span class="acts"><button class="btn sm primary" data-lkok="${e.id}:${x.d.id}">✓ שיוך</button><button class="btn sm" data-lkno="${e.id}:${x.d.id}" title="לא להציע שוב">✗</button></span></div>`).join('')}`; }).join('')
+      : '<div class="allclear">אין כרגע הצעות. כשתמלאו "שם האב" בכרטיסי תורמים – יופיעו כאן עוד</div>'}</div>`;
+  const find = k => all.find(x => x.e.id + ':' + x.d.id === k);
+  v.onchange = e => { if (e.target.matches('[data-lkonly]')) { LK_ONLY = e.target.value; routes.links(v); } };
+  v.onclick = async e => {
+    const ed = e.target.closest('[data-evedit]'); if (ed) { e.preventDefault(); eventForm(S.events.find(x => String(x.id) === ed.dataset.evedit)); return; }
+    const ok = e.target.closest('[data-lkok]'); if (ok) { ok.disabled = true; try { await lkAccept([find(ok.dataset.lkok)]); toast('שויך ✓'); routes.links(v); } catch (ex) { toast(ex.message, true); } return; }
+    const no = e.target.closest('[data-lkno]'); if (no) { no.disabled = true; try { await lkReject(find(no.dataset.lkno)); routes.links(v); } catch (ex) { toast(ex.message, true); } return; }
+    if (e.target.closest('[data-lksure]')) { if (!confirm(`לשייך ${sure.length} הצעות בטוחות?`)) return; try { await lkAccept(sure); toast(`שויכו ${sure.length} ✓`); routes.links(v); } catch (ex) { toast(ex.message, true); } }
+  };
 };
 
 </script>
