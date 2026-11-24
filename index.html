@@ -5722,6 +5722,13 @@ function linkIdeas() {
         for (const k2 of T.kidsOf(k.d)) add(k2.d, 'נין', `${k2.rel === 'בן' ? 'אביו' : 'חמיו'} – ${k.d.n} – נכד של הנפטר (דרך ${p.n})`, false); } }
     for (const x of sug.values()) if (!rejected.has(e.id + ':' + x.d.id)) out.push({e, ...x});
   }
+  // הצעות שהוספו ידנית (app_prefs: link_manual) – תמיד לבדיקה
+  const manual = (S.app_prefs.find(p => p.k === 'link_manual')?.v) || [];
+  for (const m of manual) {
+    const e = (S.events || []).find(x => x.id === m.e), d = D.donors.get(+m.d); if (!e || !d) continue;
+    if ((e.donor_ids || []).map(Number).includes(d.id) || rejected.has(e.id + ':' + d.id) || out.some(x => x.e.id === e.id && x.d.id === d.id)) continue;
+    out.push({e, d, rel: m.rel || 'משפחה', why: '✋ הוסף ידנית – ' + (m.why || 'לבדיקה'), sure: false});
+  }
   return out;
 }
 async function lkAccept(list) {
